@@ -1,0 +1,17 @@
+*.o
+*.a
+*.so
+_bin/
+_vendor/
+bin/
+release/
+*.exe
+*.test
+*.prof
+*.out
+*.pid
+*.trace
+.cover/
+/cover.out
+/pkg/
+*.test

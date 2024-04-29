@@ -1,0 +1,7 @@
+* clean, functional code that is split into multiple files as needed
+* implement lighting if possible and varied ASCII characters
+* handle rendering background layer and foreground layer seperately
+* add a GUI that adds an additional HUD layer on top of the game
+* rendered raw without any graphics libraries, not even termbox or curses for small binary to ship
+* rendering logic should be abstracted from world logic which is abstracted from game logic
+* try and work out how go packages work
