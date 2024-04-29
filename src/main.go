@@ -9,6 +9,8 @@ import (
     "fmt"
     "kuro/lib/utils"
     "kuro/lib/graphics"
+    "kuro/lib/entity/player"
+    "kuro/lib/entity/enemy"
 )
 
 func main() {
