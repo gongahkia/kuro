@@ -1,11 +1,13 @@
+# `kuro`
+
 * small cli roguelike
 * made in go
 * find all the lights
 
-## install
+## installation
 
 ```console
-$ git clone
+$ git clone https://github.com/gongahkia/kuro
 $ cd kuro
 $ make config
 ```
