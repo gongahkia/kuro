@@ -3,6 +3,7 @@
     // allow rendering of player to the screen
     // figure out how to render lighting
     // make it so you start taking damage when you've been in darkness for a while
+    // add a function that combins both wall coordinate arrays
 
 package main
 
