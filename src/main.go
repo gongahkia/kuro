@@ -12,6 +12,7 @@ import (
     "kuro/lib/graphics"
     // "kuro/lib/entity/player"
     // "kuro/lib/entity/enemy"
+    // "kuro/lib/environment/world"
 )
 
 func main() {
