@@ -1,7 +1,6 @@
 // FUA
 	// add player type struct and its struct methods
-	// add logic to check for collisions within each wall tile probably
-	// add logic to do a max and min bounds check as well, by adding values to be taken in by the player constructor
+	// add logic to check for collisions within each wall tile AND a max and min bounds check as well 
 
 package player
 
@@ -15,9 +14,13 @@ type PlayerCharacter struct {
 	Health int
 	Position map[string]int
 	NumTorches int
+	MinXCoordinateWalls int
+	MaxXCoordinateWalls int
+	MinYCoordinateWalls int
+	MaxYCoordinateWalls int
 }
 
-func NewPlayerCharacter(name string, positionX int, positionY int, numTorches int) *PlayerCharacter {
+func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, numTorches int) *PlayerCharacter {
 	fmt.Println("Player Character", name, "initialised")
 	return &PlayerCharacter{ // return a pointer to the playercharacter type to construct a new player instance
 		Name: name, 
@@ -28,6 +31,10 @@ func NewPlayerCharacter(name string, positionX int, positionY int, numTorches in
 			"y": positionY,
 		},
 		NumTorches: numTorches,
+		MinXCoordinateWalls: minXCoordinateWalls,
+		MaxXCoordinateWalls: maxXCoordinateWalls,
+		MinYCoordinateWalls: minYCoordinateWalls,
+		MaxYCoordinateWalls: maxYCoordinateWalls,
 	}
 }
 

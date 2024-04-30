@@ -25,10 +25,22 @@ func main() {
     graphics.Draw()
 
     var playerName string
+    var playerStartingXCoordinate int
+    var playerStartingYCoordinate int
+    var numStartingTorches int
+
+    playerStartingXCoordinate = 0
+    playerStartingYCoordinate = 0
+    numStartingTorches = 0
+
+    minXCoordinateWalls := 0
+    maxXCoordinateWalls := 31
+    minYCoordinateWalls := 0
+    maxYCoordinateWalls := 31
 
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
-    p1 := player.NewPlayerCharacter(playerName, 1, 1, 0);
+    p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches);
 
     for {
         var keyPress rune
