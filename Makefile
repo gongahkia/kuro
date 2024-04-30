@@ -4,12 +4,12 @@ build:src/main.go
 	@go run src/main.go
 
 config:
-	sudo apt upgrade && sudo apt update && sudo apt autoremove
-	sudo apt install golang
+	@sudo apt upgrade && sudo apt update && sudo apt autoremove
+	@sudo apt install golang
 
 clean:
-	rm -rf .git .gitignore README.md
+	@rm -rf .git .gitignore README.md
 
 up:
-	git pull
-	git status
+	@git pull
+	@git status
