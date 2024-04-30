@@ -98,3 +98,11 @@ func (p PlayerCharacter) GetTorch(numTorchess ...int){
 	fmt.Println("Player picked up", numTorches, "torches, and now has", p.NumTorches, "torches")
 
 }
+
+func (p PlayerCharacter) CheckCollision(WallPositions []map[string]int) bool{
+	for x,y := range WallPositions {
+		if p.Position["x"] == x && p.Position["y"] == y {
+			return True
+		} else {}
+	}
+}
