@@ -1,6 +1,7 @@
 // FUA
     // allow rendering of player to the screen
     // figure out how to render lighting with and without a torch
+    // work out rendering of inner walls
     // make it so you start taking damage when you've been in darkness for a while
 
 package main
@@ -12,7 +13,7 @@ import (
     "kuro/lib/graphics"
     "kuro/lib/entity/player"
     "kuro/lib/environment/walls"
-    // "kuro/lib/environment/light"
+    "kuro/lib/environment/light"
     // "kuro/lib/entity/enemy"
 )
 
@@ -35,6 +36,7 @@ func main() {
     playerStartingXCoordinate = 1
     playerStartingYCoordinate = 1
     numStartingTorches = 0
+    TorchSpawnProbability = 30
 
     minXCoordinateWalls := 0
     maxXCoordinateWalls := 31
@@ -48,6 +50,10 @@ func main() {
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
     p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
+
+    t1 := light.NewTorches()
+    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.position, TorchSpawnProbability) // FUA this should eventually take a combined slice of boundary and interior walls
+    fmt.Println(t1.Positions)
 
     // --- game loop ---
 
