@@ -8,15 +8,56 @@ package main
 
 import (
     "fmt"
+    "os"
     "kuro/lib/utils"
     "kuro/lib/graphics"
-    // "kuro/lib/entity/player"
+    "kuro/lib/entity/player"
     // "kuro/lib/entity/enemy"
     // "kuro/lib/environment/world"
 )
 
 func main() {
+
+    // ---------- main code execution ----------
+
     utils.Test()
     graphics.Draw()
-    fmt.Println(utils.ReadKeypress())
+
+    var playerName string
+
+    fmt.Println("Enter player name: ")
+    playerName = utils.ReadInput()
+    p1 := player.NewPlayerCharacter(playerName, 0, 0, 0);
+
+    for {
+        var keyPress rune
+        keyPress = utils.ReadKeypress()
+
+        // process player input
+
+        switch keyPress{
+
+            case 119:
+                fmt.Println("Moving up")
+                p1.MoveUp()
+
+            case 97:
+                fmt.Println("Moving left")
+                p1.MoveLeft()
+
+            case 115:
+                fmt.Println("Moving down")
+                p1.MoveDown()
+
+            case 100:
+                fmt.Println("Moving right")
+                p1.MoveRight()
+
+            case 113:
+                fmt.Println("Quit")
+                fmt.Println("Closing window")
+                os.Exit(0)
+
+        }
+    }
 }
