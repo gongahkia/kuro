@@ -1,5 +1,4 @@
 // FUA 
-    // add global dictionary that tracks state 
 	// add method for innerwalls that randomises the inner walls under GenerateInnerWalls later
 
 package walls
