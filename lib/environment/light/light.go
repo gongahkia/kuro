@@ -13,8 +13,9 @@ type Torches struct {
 }
 
 func NewTorches() *Torches{
+	fmt.Println("Torches have been generated")
 	return &Torches{
-		Positions: []map[string]int{}
+		Positions: []map[string]int{},
 	}
 }
 

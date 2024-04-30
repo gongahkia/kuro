@@ -10,7 +10,7 @@ import (
     "fmt"
     "os"
     "kuro/lib/utils"
-    "kuro/lib/graphics"
+    // "kuro/lib/graphics"
     "kuro/lib/entity/player"
     "kuro/lib/environment/walls"
     "kuro/lib/environment/light"
@@ -24,7 +24,6 @@ func main() {
     // --- debug info ---
 
     utils.Test()
-    graphics.Draw()
 
     // --- variable initialisation --- 
 
@@ -32,11 +31,12 @@ func main() {
     var playerStartingXCoordinate int
     var playerStartingYCoordinate int
     var numStartingTorches int
+    var TorchSpawnProbability int
 
     playerStartingXCoordinate = 1
     playerStartingYCoordinate = 1
     numStartingTorches = 0
-    TorchSpawnProbability = 30
+    TorchSpawnProbability = 100
 
     minXCoordinateWalls := 0
     maxXCoordinateWalls := 31
@@ -52,17 +52,18 @@ func main() {
     p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
 
     t1 := light.NewTorches()
-    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.position, TorchSpawnProbability) // FUA this should eventually take a combined slice of boundary and interior walls
+    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position, TorchSpawnProbability) // FUA this should eventually take a combined slice of boundary and interior walls
     fmt.Println(t1.Positions)
 
     // --- game loop ---
 
     for {
-        var keyPress rune
-        keyPress = utils.ReadKeypress()
+        // render graphics
+        // graphics.Draw(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position)
 
         // process player input
-
+        var keyPress rune
+        keyPress = utils.ReadKeypress()
         switch keyPress{
 
             case 119:
