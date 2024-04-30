@@ -47,43 +47,76 @@ func (p PlayerCharacter) CheckCollision(WallPositions []map[string]int) bool{ //
 	return false
 }
 
-func (p PlayerCharacter) MoveLeft(WallPositions []map[string]int){
+func (p PlayerCharacter) CheckPickup(TorchPositions []map[string]int) bool{ 
+	for _, position := range TorchPositions {
+		if p.Position["x"] == position["x"] && p.Position["y"] == position["y"] {
+			return true
+		} else {}
+	}
+	return false
+}
+
+func (p PlayerCharacter) MoveLeft(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["x"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] += p.Speed
 		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		return false
+	} else if p.CheckPickup(TorchPositions) { // torch picked up
+		p.GetTorch(1)
+		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		return true
 	} else { // no collision
 		fmt.Println("Moved one cell left, current coordinates are:", p.Position)
+		return false
 	}
 }
 
-func (p PlayerCharacter) MoveRight(WallPositions []map[string]int){
+func (p PlayerCharacter) MoveRight(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["x"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] -= p.Speed
 		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		return false
+	} else if p.CheckPickup(TorchPositions) { // torch picked up
+		p.GetTorch(1)
+		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		return true
 	} else { // no collision
 		fmt.Println("Moved one cell right, current coordinates are:", p.Position)
+		return false
 	}
 }
 
-func (p PlayerCharacter) MoveUp(WallPositions []map[string]int){
+func (p PlayerCharacter) MoveUp(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["y"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] += p.Speed
 		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		return false
+	} else if p.CheckPickup(TorchPositions) { // torch picked up
+		p.GetTorch(1)
+		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		return true
 	} else { // no collision
 		fmt.Println("Moved one cell up, current coordinates are:", p.Position)
+		return false
 	}
 }
 
-func (p PlayerCharacter) MoveDown(WallPositions []map[string]int){
+func (p PlayerCharacter) MoveDown(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["y"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] -= p.Speed
 		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		return false
+	} else if p.CheckPickup(TorchPositions) { // torch picked up
+		p.GetTorch(1)
+		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		return true
 	} else { // no collision
 		fmt.Println("Moved one cell down, current coordinates are:", p.Position)
+		return false
 	}
 }
 

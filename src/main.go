@@ -76,19 +76,27 @@ func main() {
 
             case 119:
                 fmt.Println("Moving up")
-                p1.MoveUp(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
+                if p1.MoveUp(b1.Positions, t1.Positions) {// FUA this should eventually take a combined slice of boundary and interior walls
+                    t1.TorchPickedUp(p1.Position)
+                } else {}
 
             case 97:
                 fmt.Println("Moving left")
-                p1.MoveLeft(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
+                if p1.MoveLeft(b1.Positions, t1.Positions) {// FUA this should eventually take a combined slice of boundary and interior walls
+                    t1.TorchPickedUp(p1.Position)
+                } else {}
 
             case 115:
                 fmt.Println("Moving down")
-                p1.MoveDown(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
+                if p1.MoveDown(b1.Positions, t1.Positions) {// FUA this should eventually take a combined slice of boundary and interior walls
+                    t1.TorchPickedUp(p1.Position)
+                } else {}
 
             case 100:
                 fmt.Println("Moving right")
-                p1.MoveRight(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
+                if p1.MoveRight(b1.Positions, t1.Positions) {// FUA this should eventually take a combined slice of boundary and interior walls
+                    t1.TorchPickedUp(p1.Position)
+                } else {}
 
             case 113:
                 fmt.Println("Quit")

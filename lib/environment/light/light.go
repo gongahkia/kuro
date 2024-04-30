@@ -43,3 +43,14 @@ func (t *Torches) GenerateTorchPositions(minXCoordinateWalls int, maxXCoordinate
 		}
 	}
 }
+
+func (t *Torches) TorchPickedUp(TorchPosition map[string]int){
+	newPositionSlice := []map[string]int{}
+	for _, val := range t.Positions {
+		if val["x"] == TorchPosition["x"] && val["y"] == TorchPosition["y"] {
+		} else {
+			newPositionSlice = append(newPositionSlice, val)
+		}
+	}
+	t.Positions = newPositionSlice
+}
