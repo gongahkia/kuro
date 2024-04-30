@@ -59,7 +59,7 @@ func NewInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 	}
 }
 
-func (n InnerWalls) GenerateInnerWalls() {
+func (n InnerWalls) GenerateInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int) {
 	// FUA add logic here to populate and randomise inner wall configuration
 	fmt.Println("Inner walls have been randomly generated")
 }

@@ -1,9 +1,7 @@
 // FUA
-    // add character controller under lib in a further directory and allow for interaction between keypress and the character controller
     // allow rendering of player to the screen
-    // figure out how to render lighting
+    // figure out how to render lighting with and without a torch
     // make it so you start taking damage when you've been in darkness for a while
-    // add a function that combins both wall coordinate arrays
 
 package main
 
@@ -45,7 +43,7 @@ func main() {
 
     b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     b1.GenerateBoundaryWalls()
-    fmt.Println(b1.Positions) // WHY EMPTY???
+    fmt.Println(b1.Positions) 
 
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
@@ -63,19 +61,19 @@ func main() {
 
             case 119:
                 fmt.Println("Moving up")
-                p1.MoveUp(b1.Positions)
+                p1.MoveUp(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
 
             case 97:
                 fmt.Println("Moving left")
-                p1.MoveLeft(b1.Positions)
+                p1.MoveLeft(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
 
             case 115:
                 fmt.Println("Moving down")
-                p1.MoveDown(b1.Positions)
+                p1.MoveDown(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
 
             case 100:
                 fmt.Println("Moving right")
-                p1.MoveRight(b1.Positions)
+                p1.MoveRight(b1.Positions) // FUA this should eventually take a combined slice of boundary and interior walls
 
             case 113:
                 fmt.Println("Quit")

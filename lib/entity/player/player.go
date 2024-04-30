@@ -38,7 +38,7 @@ func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinat
 	}
 }
 
-func (p PlayerCharacter) CheckCollision(WallPositions []map[string]int) bool{
+func (p PlayerCharacter) CheckCollision(WallPositions []map[string]int) bool{ // FUA this should eventually take in a combined slice of wall positions of both inner and boundary walls
 	for _, position := range WallPositions {
 		if p.Position["x"] == position["x"] && p.Position["y"] == position["y"] {
 			return true

@@ -18,6 +18,6 @@ func NewTorches() *Torches{
 	}
 }
 
-func (t Torches) GenerateTorchPositions(){
-	// FUA add code here to generate torch positions after considering wall positions
+func (t Torches) GenerateTorchPositions(WallPositions []map[string]int){
+	// FUA add code here to generate torch positions after considering all combined wall positions
 }
