@@ -21,8 +21,8 @@ type PlayerCharacter struct {
 }
 
 func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, numTorches int) *PlayerCharacter {
-	fmt.Println("Player Character", name, "initialised")
-	return &PlayerCharacter{ // return a pointer to the playercharacter type to construct a new player instance
+	fmt.Println("Player Character", name, "initialised, current coordinates are:", positionX, positionY)
+	return &PlayerCharacter{ 
 		Name: name, 
 		Speed: 1,
 		Health: 5,

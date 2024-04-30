@@ -34,9 +34,9 @@ func NewBoundaryWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoor
 	}
 }
 
-func (b BoundaryWalls) GenerateBoundaryWalls() {
-	for y := b.MinYCoordinateWalls; y < b.MaxYCoordinateWalls; y++{
-		for x := b.MinXCoordinateWalls; x < b.MaxXCoordinateWalls; x++{
+func (b *BoundaryWalls) GenerateBoundaryWalls() {
+	for y := b.MinYCoordinateWalls; y <= b.MaxYCoordinateWalls; y++{
+		for x := b.MinXCoordinateWalls; x <= b.MaxXCoordinateWalls; x++{
 			if x == b.MinXCoordinateWalls || x == b.MaxXCoordinateWalls || y == b.MinYCoordinateWalls || y == b.MaxYCoordinateWalls {
 				pos := map[string]int{
 					"x": x, 
