@@ -1,5 +1,6 @@
 // FUA
 	// add player type struct and its struct methods
+	// add logic to check for collisions within each wall tile probably
 
 package player
 

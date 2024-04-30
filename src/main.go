@@ -13,7 +13,7 @@ import (
     "kuro/lib/graphics"
     "kuro/lib/entity/player"
     // "kuro/lib/entity/enemy"
-    // "kuro/lib/environment/world"
+    // "kuro/lib/environment/walls"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
-    p1 := player.NewPlayerCharacter(playerName, 0, 0, 0);
+    p1 := player.NewPlayerCharacter(playerName, 1, 1, 0);
 
     for {
         var keyPress rune
