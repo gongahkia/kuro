@@ -12,8 +12,9 @@ import (
     "kuro/lib/utils"
     "kuro/lib/graphics"
     "kuro/lib/entity/player"
-    // "kuro/lib/entity/enemy"
     // "kuro/lib/environment/walls"
+    // "kuro/lib/environment/light"
+    // "kuro/lib/entity/enemy"
 )
 
 func main() {

@@ -1,6 +1,7 @@
 // FUA
 	// add player type struct and its struct methods
 	// add logic to check for collisions within each wall tile probably
+	// add logic to do a max and min bounds check as well, by adding values to be taken in by the player constructor
 
 package player
 
