@@ -39,23 +39,39 @@ func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinat
 }
 
 func (p PlayerCharacter) MoveLeft(){
-	p.Position["x"] -= p.Speed
-	fmt.Println("Moved one cell left, current coordinates are:", p.Position)
+	if p.Position["x"] - p.Speed < p.MinXCoordinateWalls + 1 {
+		fmt.Println("Left wall hit, current coordinates are:", p.Position)
+	} else {
+		p.Position["x"] -= p.Speed
+		fmt.Println("Moved one cell left, current coordinates are:", p.Position)
+	}
 }
 
 func (p PlayerCharacter) MoveRight(){
-	p.Position["x"] += p.Speed
-	fmt.Println("Moved one cell right, current coordinates are:", p.Position)
+	if p.Position["x"] + p.Speed > p.MaxXCoordinateWalls - 1 {
+		fmt.Println("Right wall hit, current coordinates are:", p.Position)
+	} else {
+		p.Position["x"] += p.Speed
+		fmt.Println("Moved one cell right, current coordinates are:", p.Position)
+	}
 }
 
 func (p PlayerCharacter) MoveUp(){
-	p.Position["y"] -= p.Speed
-	fmt.Println("Moved one cell up, current coordinates are:", p.Position)
+	if p.Position["y"] - p.Speed < p.MinYCoordinateWalls + 1 {
+		fmt.Println("Upper wall hit, current coordinates are:", p.Position)
+	} else {
+		p.Position["y"] -= p.Speed
+		fmt.Println("Moved one cell up, current coordinates are:", p.Position)
+	}
 }
 
 func (p PlayerCharacter) MoveDown(){
-	p.Position["y"] += p.Speed
-	fmt.Println("Moved one cell down, current coordinates are:", p.Position)
+	if p.Position["y"] + p.Speed > p.MaxYCoordinateWalls - 1 {
+		fmt.Println("Lower wall hit, current coordinates are:", p.Position)
+	} else {
+		p.Position["y"] += p.Speed
+		fmt.Println("Moved one cell down, current coordinates are:", p.Position)
+	}
 }
 
 func (p PlayerCharacter) TakeDamage(damage int){

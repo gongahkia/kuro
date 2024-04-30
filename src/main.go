@@ -29,8 +29,8 @@ func main() {
     var playerStartingYCoordinate int
     var numStartingTorches int
 
-    playerStartingXCoordinate = 0
-    playerStartingYCoordinate = 0
+    playerStartingXCoordinate = 1
+    playerStartingYCoordinate = 1
     numStartingTorches = 0
 
     minXCoordinateWalls := 0
