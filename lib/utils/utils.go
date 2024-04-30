@@ -4,6 +4,7 @@ import (
     "bufio"
     "fmt"
     "os"
+    "math"
 )
 
 func Test() {
@@ -40,5 +41,14 @@ func Contains(Haystack []map[string]int, Needle map[string]int) bool{
             return true
         } else {}
     }    
+    return false
+}
+
+func ColumnRowProximity(Haystack []map[string]int, Needle map[string]int, tolerance int) bool{
+    for _,val := range Haystack {
+        if math.Abs(float64(val["x"] - Needle["x"])) < float64(tolerance) || math.Abs(float64(val["y"] - Needle["y"])) < float64(tolerance) {
+            return true
+        } else {}
+    }
     return false
 }
