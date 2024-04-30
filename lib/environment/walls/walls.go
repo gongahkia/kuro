@@ -30,7 +30,7 @@ func NewBoundaryWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoor
 		MaxXCoordinateWalls: maxXCoordinateWalls,
 		MinYCoordinateWalls: minYCoordinateWalls,
 		MaxYCoordinateWalls: maxYCoordinateWalls,
-		Positions: {}
+		Positions: []map[string]int{},
 	}
 }
 
@@ -38,12 +38,11 @@ func (b BoundaryWalls) GenerateBoundaryWalls() {
 	for y := b.MinYCoordinateWalls; y < b.MaxYCoordinateWalls; y++{
 		for x := b.MinXCoordinateWalls; x < b.MaxXCoordinateWalls; x++{
 			if x == b.MinXCoordinateWalls || x == b.MaxXCoordinateWalls || y == b.MinYCoordinateWalls || y == b.MaxYCoordinateWalls {
-				b.Positions = append(b.Positions, 
-					{
-						"x": x,
-						"y": y
-					}
-				)
+				pos := map[string]int{
+					"x": x, 
+					"y":y,
+				}
+				b.Positions = append(b.Positions, pos)
 			}
 		}
 	}
@@ -56,7 +55,7 @@ func NewInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 		MaxXCoordinateWalls: maxXCoordinateWalls,
 		MinYCoordinateWalls: minYCoordinateWalls,
 		MaxYCoordinateWalls: maxYCoordinateWalls,
-		Positions: {}
+		Positions: []map[string]int{},
 	}
 }
 

@@ -13,7 +13,7 @@ import (
     "kuro/lib/utils"
     "kuro/lib/graphics"
     "kuro/lib/entity/player"
-    // "kuro/lib/environment/walls"
+    "kuro/lib/environment/walls"
     // "kuro/lib/environment/light"
     // "kuro/lib/entity/enemy"
 )
@@ -22,8 +22,12 @@ func main() {
 
     // ---------- main code execution ----------
 
+    // --- debug info ---
+
     utils.Test()
     graphics.Draw()
+
+    // --- variable initialisation --- 
 
     var playerName string
     var playerStartingXCoordinate int
@@ -39,9 +43,14 @@ func main() {
     minYCoordinateWalls := 0
     maxYCoordinateWalls := 31
 
+    b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
+    b1.GenerateBoundaryWalls()
+
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
-    p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches);
+    p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
+
+    // --- game loop ---
 
     for {
         var keyPress rune

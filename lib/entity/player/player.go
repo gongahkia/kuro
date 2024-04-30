@@ -39,11 +39,12 @@ func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinat
 }
 
 func (p PlayerCharacter) CheckCollision(WallPositions []map[string]int) bool{
-	for x,y := range WallPositions {
-		if p.Position["x"] == x && p.Position["y"] == y {
-			return True
+	for _, position := range WallPositions {
+		if p.Position["x"] == position["x"] && p.Position["y"] == position["y"] {
+			return true
 		} else {}
 	}
+	return false
 }
 
 func (p PlayerCharacter) MoveLeft(WallPositions []map[string]int){
