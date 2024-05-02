@@ -1,5 +1,7 @@
 // FUA
-    // allow rendering of player to the screen
+    // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
+    // ensure that the inner wall randomness comes BEFORE the torches spawn in
+    // fix the random torch posiiton spawn algorithm
     // figure out how to render lighting with and without a torch
     // work out rendering of inner walls
     // make it so you start taking damage when you've been in darkness for a while

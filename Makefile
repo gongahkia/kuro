@@ -6,6 +6,7 @@ build:src/main.go
 config:
 	@sudo apt upgrade && sudo apt update && sudo apt autoremove
 	@sudo apt install golang
+	@go mod tidy
 
 clean:
 	@rm -rf .git .gitignore README.md
