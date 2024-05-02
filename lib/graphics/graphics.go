@@ -42,3 +42,12 @@ func Draw(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls 
 		fmt.Printf("\n")
 	}
 }
+
+func Deserialize(filePath string, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)[]map[string]int{
+	// FUA
+		// finish up this function to read a txt file for random shape generation to be randomly placed within other files and return a bunch of coordinates
+		// function has to check the size of the object and scale it accordingly
+		// consider writing a scale up and scale down function that appropriately scales a given object of specified coordinates
+			// is there some secret math hack i can use here?
+			// google whether it is possible to write a go function that either does the thing I want, or throws an error if execution fails
+}
