@@ -66,8 +66,19 @@ func main() {
     // --- game loop ---
 
     for {
+        // debug info
+        fmt.Println("num torches are", p1.NumTorches)
+        fmt.Println(t1)
+
         // render graphics
         graphics.Draw(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position)
+
+        // win condition
+        if len(t1.Positions) == 0 {
+            fmt.Println("Congratulations", p1.Name, ",you have collected all the keys. \nYou win!")
+            fmt.Println("Closing window")
+            os.Exit(0)
+        }
 
         // process player input
         var keyPress rune

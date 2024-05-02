@@ -56,7 +56,7 @@ func (p PlayerCharacter) CheckPickup(TorchPositions []map[string]int) bool{
 	return false
 }
 
-func (p PlayerCharacter) MoveLeft(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
+func (p *PlayerCharacter) MoveLeft(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["x"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] += p.Speed
@@ -72,7 +72,7 @@ func (p PlayerCharacter) MoveLeft(WallPositions []map[string]int, TorchPositions
 	}
 }
 
-func (p PlayerCharacter) MoveRight(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
+func (p *PlayerCharacter) MoveRight(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["x"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] -= p.Speed
@@ -88,7 +88,7 @@ func (p PlayerCharacter) MoveRight(WallPositions []map[string]int, TorchPosition
 	}
 }
 
-func (p PlayerCharacter) MoveUp(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
+func (p *PlayerCharacter) MoveUp(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["y"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] += p.Speed
@@ -104,7 +104,7 @@ func (p PlayerCharacter) MoveUp(WallPositions []map[string]int, TorchPositions [
 	}
 }
 
-func (p PlayerCharacter) MoveDown(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
+func (p *PlayerCharacter) MoveDown(WallPositions []map[string]int, TorchPositions []map[string]int) bool{
 	p.Position["y"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] -= p.Speed
@@ -129,11 +129,7 @@ func (p PlayerCharacter) TakeDamage(damage int){
 	fmt.Println(p.Name, " took damage, current health is", p.Health)
 }
 
-func (p PlayerCharacter) GetTorch(numTorchess ...int){
-	numTorches := 1
-	if len(numTorchess) > 0{
-		numTorches = numTorchess[0]
-	} else {}
+func (p *PlayerCharacter) GetTorch(numTorches int){
 	p.NumTorches += numTorches
 	fmt.Println("Player picked up", numTorches, "torches, and now has", p.NumTorches, "torches")
 }
