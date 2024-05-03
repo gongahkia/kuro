@@ -1,7 +1,3 @@
-// FUA
-    // add a title screen with the instructions, "find the torches before time runs out", "don't get caught by bob"
-    // further add a prompt that BOB IS CHASING YOU when he is within render view
-
 package main
 
 import (
@@ -13,6 +9,7 @@ import (
     "kuro/lib/environment/walls"
     "kuro/lib/environment/light"
     "kuro/lib/entity/enemy"
+	"github.com/fatih/color"
 )
 
 func main() {
@@ -21,7 +18,14 @@ func main() {
 
     // --- debug info ---
 
-    utils.Test()
+    // utils.Test()
+
+    // --- color initialisation ---
+
+	Blue := color.New(color.FgBlue, color.Bold)
+	Red := color.New(color.FgRed, color.Bold)
+	Green := color.New(color.FgGreen)
+	Cyan := color.New(color.FgCyan)
 
     // --- variable initialisation --- 
 
@@ -61,7 +65,8 @@ func main() {
     b1.GenerateBoundaryWalls()
     // fmt.Println(b1.Positions) 
 
-    fmt.Println("Enter player name: ")
+    graphics.DrawTitleScreen()
+    Cyan.Print("provide the name you will be martyred by: ")
     playerName = utils.ReadInput()
     p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
     p1.GetRandomSpawnCoordinates(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
@@ -90,14 +95,14 @@ func main() {
         } else {} // weird edge case (should never be hit)
 
         // hud info
-        fmt.Println("Num torches collected:", p1.NumTorches)
+        Cyan.Print("\ntorches collected: ", p1.NumTorches, " / ", len(t1.Positions), "\n")
 
         // win condition
         if len(t1.Positions) == 0 {
             fmt.Print("\033[H\033[2J")
             graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
-            fmt.Println("Congratulations", p1.Name, ",you have collected all the torches. \nYou win!")
-            fmt.Println("Closing window")
+            Green.Print("Congratulations ", p1.Name, ",you have collected all the torches. \nYou win!\n")
+            Cyan.Print("Closing window")
             os.Exit(0)
         }
 
@@ -105,8 +110,12 @@ func main() {
         if e1.Position["x"] == p1.Position["x"] && e1.Position["y"] == p1.Position["y"] {
             fmt.Print("\033[H\033[2J")
             graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
-            fmt.Println("Oh no", p1.Name, ",you have been caught by Bob. \nTry again next time!")
-            fmt.Println("Closing window")
+            Blue.Print("\n", p1.Name, "\n")
+            Red.Print("\nCAUSE OF DEATH:")
+            Cyan.Print("\nShock to the nervous system")
+            Red.Print("\n\nDETAILS:")
+            Cyan.Print("\nVictim's limbs were found contorted at unnatural angles\nVictim's skin was covered in intricate symbols carved into their flesh, suggesting a ritualistic killing\nAlso observed complete fragmentation of the pelvis and lower spinal cord\nVictim's right calf was also entirely severed from below the knee\n\n")
+            Cyan.Print("Closing window\n")
             os.Exit(0)
         }
 
@@ -144,8 +153,9 @@ func main() {
                 } else {}
 
             case 113:
-                fmt.Println("Quit")
-                fmt.Println("Closing window")
+                fmt.Print("\033[H\033[2J")
+                Cyan.Print("Quit\n")
+                Cyan.Print("Closing window\n")
                 os.Exit(0)
 
         }

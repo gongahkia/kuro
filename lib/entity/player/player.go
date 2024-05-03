@@ -137,7 +137,7 @@ func (p *PlayerCharacter) GetTorch(numTorches int){
 func (p *PlayerCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int){
 	rand.Seed(time.Now().UnixNano()^int64(os.Getpid())^int64(rand.Intn(10000)))
 	p.Position = map[string]int{
-		"x": utils.RandomNumber(minXCoordinateWalls + 1, maxXCoordinateWalls),
-		"y": utils.RandomNumber(minYCoordinateWalls + 1, maxYCoordinateWalls),
+		"x": utils.RandomNumber(minXCoordinateWalls + 1, maxXCoordinateWalls - 1),
+		"y": utils.RandomNumber(minYCoordinateWalls + 1, maxYCoordinateWalls - 1),
 	}
 }

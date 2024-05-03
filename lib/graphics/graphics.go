@@ -6,7 +6,28 @@ import (
 	"github.com/fatih/color"
 )
 
-func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawTitleScreen(){
+	// color initialisation
+	Red := color.New(color.FgRed, color.Bold)
+	Green := color.New(color.FgGreen)
+	Magenta := color.New(color.FgMagenta)
+	Yellow := color.New(color.FgYellow)
+	Blue := color.New(color.FgBlue)
+	Cyan := color.New(color.FgCyan)
+
+	// color rendering
+	Blue.Print("K U R O\n\n")
+	Cyan.Print("There are two rules\n")	
+	Cyan.Print("1. Find all the torches\n")	
+	Cyan.Print("2. Don't get caught by IT\n\n")	
+	Green.Print("@ <-- this is you\n")
+	Yellow.Print("! <-- these are torches\n")
+	Red.Print("# <-- these are walls\n")
+	Magenta.Print("? <-- this is IT\n\n")
+	Cyan.Print("[W] [A] [S] [D] to move\n\n")	
+}
+
+func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { 
 	// variable initialisation
 	var visibleShader []map[string]int
 
@@ -49,7 +70,7 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 	}
 }
 
-func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { 
 
 	// variable initialisation
 	var visibleShader []map[string]int
@@ -93,7 +114,7 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 	}
 }
 
-func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int) { 
 
 	Red := color.New(color.FgRed, color.Bold)
 	Green := color.New(color.FgGreen)
