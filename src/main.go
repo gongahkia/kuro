@@ -1,10 +1,23 @@
 // FUA
-    // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
-    // ensure that the inner wall randomness comes BEFORE the torches spawn in
     // figure out how to render lighting with and without a torch
-    // work out rendering of inner walls
-    // make it so you start taking damage when you've been in darkness for a while
+        // without torch => surrounding 8 cells
+            // LLL
+            // L@L
+            // LLL
+        // with torch => diamond shape of 3 cells in length and height each side is in light 
+            //    L
+            //   LLL
+            //  LLLLL
+            // LLL@LLL
+            //  LLLLL
+            //   LLL
+            //    L
+    // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
+    // implement enemey path finding they can see you
     // allow for size of arena to be dynamically changed and a fixed formula to be used to calculate the resulting number of torches and subsequent dithering 
+    // work out rendering of inner walls
+        // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
+        // ensure that the inner wall randomness comes BEFORE the torches spawn in
 
 package main
 
