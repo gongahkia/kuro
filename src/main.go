@@ -1,5 +1,4 @@
 // FUA
-    // work out why wall rendering graphics are buggy now with the new light logic, i wanna be able to see wall edges when im near them, not darkness
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
     // implement enemey path finding they can see you
     // should i add a weight factor to this game?

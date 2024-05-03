@@ -24,7 +24,7 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 	// Magenta := color.New(color.FgMagenta)
 	// Cyan := color.New(color.FgCyan)
 
-	visibleShader = IlluminatedNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, lengthHeightIllumination)
+	visibleShader = IlluminatedNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
 
 	fmt.Println("Drawing world")
 	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
@@ -66,7 +66,7 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 	// Magenta := color.New(color.FgMagenta)
 	// Cyan := color.New(color.FgCyan)
 
-	visibleShader = IlluminatedWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, lengthHeightIllumination)
+	visibleShader = IlluminatedWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
 
 	fmt.Println("Drawing world")
 	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
@@ -131,17 +131,19 @@ func Abs(x int) int {
     return x
 }
 
-func SanitiseScope(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, inputSlice []map[string]int) []map[string]int{
+func SanitiseScope(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, inputSlice []map[string]int, WallPositions []map[string]int) []map[string]int{
 	fin := []map[string]int{}
 	for _, coordinate := range inputSlice {
 		if coordinate["x"] > minXCoordinateWalls && coordinate["x"] < maxXCoordinateWalls && coordinate["y"] > minYCoordinateWalls && coordinate["y"] < maxYCoordinateWalls {
 			fin = append(fin, coordinate)
-		} else {}
+		} else if utils.Contains(WallPositions, coordinate){
+			fin = append(fin, coordinate)
+		}
 	}
 	return fin
 }
 
-func IlluminatedNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, lengthHeightIllumination int)[]map[string]int{
+func IlluminatedNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, WallPositions []map[string]int, lengthHeightIllumination int)[]map[string]int{
 	fin := []map[string]int{}
 	currX := PlayerPosition["x"]
 	currY := PlayerPosition["y"]
@@ -154,10 +156,10 @@ func IlluminatedNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCo
 			fin = append(fin, curr)
 		}
 	}
-	return SanitiseScope(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, fin)
+	return SanitiseScope(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, fin, WallPositions)
 }
 
-func IlluminatedWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, lengthHeightIllumination int) []map[string]int {
+func IlluminatedWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, WallPositions []map[string]int, lengthHeightIllumination int) []map[string]int {
     currX := PlayerPosition["x"]
     currY := PlayerPosition["y"]
     fin := []map[string]int{}
@@ -169,7 +171,7 @@ func IlluminatedWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minY
             }
         }
     }
-    return SanitiseScope(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, fin)
+    return SanitiseScope(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, fin, WallPositions)
 }
 
 /*
