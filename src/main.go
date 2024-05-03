@@ -65,6 +65,7 @@ func main() {
     b1.GenerateBoundaryWalls()
     // fmt.Println(b1.Positions) 
 
+    fmt.Print("\033[H\033[2J")
     graphics.DrawTitleScreen()
     Cyan.Print("provide the name you will be martyred by: ")
     playerName = utils.ReadInput()
@@ -95,7 +96,7 @@ func main() {
         } else {} // weird edge case (should never be hit)
 
         // hud info
-        Cyan.Print("\ntorches collected: ", p1.NumTorches, " / ", len(t1.Positions), "\n")
+        Cyan.Print("\ntorches collected: ", p1.NumTorches, " / ", maxNumberTorches, "\n")
 
         // win condition
         if len(t1.Positions) == 0 {
