@@ -1,3 +1,7 @@
+// FUA
+    // randomise player and enemey spawn location
+    // add a title screen with the instructions, "find the torches before time runs out", "don't get caught by bob"
+
 package main
 
 import (
