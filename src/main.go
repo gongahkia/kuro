@@ -1,4 +1,7 @@
 // FUA
+    // debug the pathfinding, its not even working right now
+    // randomise player spawn location
+    // add a title screen with the instructions, "find the torches before time runs out", "don't get caught by bob"
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
     // have only one enemy spawn in at first, it can repeatedly spawn in as long as there's a dark patch
     // implement enemey path finding they can see you
@@ -26,7 +29,7 @@ import (
     "kuro/lib/entity/player"
     "kuro/lib/environment/walls"
     "kuro/lib/environment/light"
-    // "kuro/lib/entity/enemy"
+    "kuro/lib/entity/enemy"
 )
 
 func main() {
@@ -50,6 +53,9 @@ func main() {
     var numStartingTorches int
     var lengthHeightIlluminationNoTorch int
     var lengthHeightIlluminationWithTorch int
+    var enemyStartingCoordinates map[string]int
+    var enemySpeed int
+    var enemyHealth int
 
     minXCoordinateWalls = 0
     maxXCoordinateWalls = 16
@@ -61,6 +67,12 @@ func main() {
     maxNumberTorches = 3
     lengthHeightIlluminationNoTorch = 2
     lengthHeightIlluminationWithTorch = 3
+    enemyStartingCoordinates = map[string]int{
+        "x": 12,
+        "y": 12,
+    }
+    enemySpeed = 1
+    enemyHealth = 1
 
     b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     b1.GenerateBoundaryWalls()
@@ -74,6 +86,8 @@ func main() {
     t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position) // FUA this should eventually take a combined slice of boundary and interior walls
     fmt.Println(t1.Positions)
 
+    e1 := enemy.NewEnemyCharacter(enemySpeed, enemyHealth, enemyStartingCoordinates, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
+
     // --- game loop ---
 
     for {
@@ -83,18 +97,30 @@ func main() {
 
         // render graphics
         if p1.NumTorches > 0 { // has a torch
-            graphics.DrawWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, lengthHeightIlluminationWithTorch)
+            graphics.DrawWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position, lengthHeightIlluminationWithTorch)
         } else if p1.NumTorches == 0 { // has no torch
-            graphics.DrawNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, lengthHeightIlluminationNoTorch)
+            graphics.DrawNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position, lengthHeightIlluminationNoTorch)
         } else {} // weird edge case (should never be hit)
 
         // win condition
         if len(t1.Positions) == 0 {
-            graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position)
+            graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
             fmt.Println("Congratulations", p1.Name, ",you have collected all the torches. \nYou win!")
             fmt.Println("Closing window")
             os.Exit(0)
         }
+
+        // lose condition
+        if e1.Position["x"] == p1.Position["x"] && e1.Position["y"] == p1.Position["y"] {
+            graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
+            fmt.Println("Oh no", p1.Name, ",you have been caught by Bob. \nTry again next time!")
+            fmt.Println("Closing window")
+            os.Exit(0)
+        }
+
+        // enemy movement
+        e1.SetPosition(e1.GetNextMove(p1.Position))
+        fmt.Println("enemy moved to current coordinate:", e1.Position)
 
         // process player input
         var keyPress rune

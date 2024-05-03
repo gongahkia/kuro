@@ -1,7 +1,3 @@
-// FUA
-	// add logic for rendering the world by receiving fixed coordinates
-	// allow for rendering different layers to enable dithering lighting for the player character and how such lighting interacts with walls
-
 package graphics
 
 import (
@@ -10,7 +6,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
 	// variable initialisation
 	var visibleShader []map[string]int
 
@@ -18,10 +14,10 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 
 	Red := color.New(color.FgRed, color.Bold)
 	Green := color.New(color.FgGreen)
+	Magenta := color.New(color.FgMagenta)
 	Yellow := color.New(color.FgYellow)
 	White := color.New(color.FgWhite)
 	// Blue := color.New(color.FgBlue)
-	// Magenta := color.New(color.FgMagenta)
 	// Cyan := color.New(color.FgCyan)
 
 	visibleShader = IlluminatedNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
@@ -38,6 +34,8 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 					Red.Print("#")
 				} else if curr["x"] == PlayerPosition["x"] && curr["y"] == PlayerPosition["y"] { // player found at current position, so draw player
 					Green.Print("@")
+				} else if curr["x"] == EnemyPosition["x"] && curr["y"] == EnemyPosition["y"] {
+					Magenta.Print("?")
 				} else if utils.Contains(TorchPositions, curr) { // torches found at current position, so draw torch
 					Yellow.Print("!")
 				} else { // nothing found at current position, so draw empty space
@@ -51,7 +49,7 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 	}
 }
 
-func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
 
 	// variable initialisation
 	var visibleShader []map[string]int
@@ -60,10 +58,10 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 
 	Red := color.New(color.FgRed, color.Bold)
 	Green := color.New(color.FgGreen)
+	Magenta := color.New(color.FgMagenta)
 	Yellow := color.New(color.FgYellow)
 	White := color.New(color.FgWhite)
 	// Blue := color.New(color.FgBlue)
-	// Magenta := color.New(color.FgMagenta)
 	// Cyan := color.New(color.FgCyan)
 
 	visibleShader = IlluminatedWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
@@ -80,6 +78,8 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 					Red.Print("#")
 				} else if curr["x"] == PlayerPosition["x"] && curr["y"] == PlayerPosition["y"] { // player found at current position, so draw player
 					Green.Print("@")
+				} else if curr["x"] == EnemyPosition["x"] && curr["y"] == EnemyPosition["y"] {
+					Magenta.Print("?")
 				} else if utils.Contains(TorchPositions, curr) { // torches found at current position, so draw torch
 					Yellow.Print("!")
 				} else { // nothing found at current position, so draw empty space
@@ -93,13 +93,13 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 	}
 }
 
-func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, EnemyPosition map[string]int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
 
 	Red := color.New(color.FgRed, color.Bold)
 	Green := color.New(color.FgGreen)
+	Magenta := color.New(color.FgMagenta)
 	Yellow := color.New(color.FgYellow)
 	// Blue := color.New(color.FgBlue)
-	// Magenta := color.New(color.FgMagenta)
 	// Cyan := color.New(color.FgCyan)
 	// White := color.New(color.FgWhite)
 
@@ -114,6 +114,8 @@ func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordina
 				Red.Print("#")
 			} else if curr["x"] == PlayerPosition["x"] && curr["y"] == PlayerPosition["y"] { // player found at current position, so draw player
 				Green.Print("@")
+			} else if curr["x"] == EnemyPosition["x"] && curr["y"] == EnemyPosition["y"] {
+				Magenta.Print("?")
 			} else if utils.Contains(TorchPositions, curr) { // torches found at current position, so draw torch
 				Yellow.Print("!")
 			} else { // nothing found at current position, so draw empty space
