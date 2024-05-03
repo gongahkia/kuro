@@ -1,5 +1,6 @@
 // FUA
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
+    // have only one enemy spawn in at first, it can repeatedly spawn in as long as there's a dark patch
     // implement enemey path finding they can see you
     // should i add a weight factor to this game?
         // then make weight reduce speed where speed is relative so each time you pick up or drop an item the item is a physical object that spawns in
