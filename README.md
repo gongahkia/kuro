@@ -1,3 +1,5 @@
+![](https://img.shields.io/badge/kuro_1.0-passing-green)
+
 # `kuro`
 
 * small cli roguelike
