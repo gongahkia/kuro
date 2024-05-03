@@ -1,11 +1,8 @@
-// FUA
-	// add spawn conditions for the enemy
-
 package enemy
 
 import (
 	"fmt"
-	"math"
+	"kuro/lib/utils"
 )
 
 type EnemyCharacter struct {
@@ -34,21 +31,44 @@ func NewEnemyCharacter(EnemySpeed int, EnemyHealth int, EnemyPosition map[string
 	}
 }
 
-// FUA its not even working right now so need to debug
+// moves bob in a snaking fashion
 func (e EnemyCharacter) GetNextMove(PlayerPosition map[string]int) map[string]int {
-	euclideanDistance := math.Sqrt(math.Pow(float64(PlayerPosition["x"]-e.Position["x"]), 2) + math.Pow(float64(PlayerPosition["y"]-e.Position["y"]), 2))
-	if euclideanDistance <= float64(e.Speed) {
-		return e.Position
+	xDisplacement := PlayerPosition["x"] - e.Position["x"]
+	yDisplacement := PlayerPosition["y"] - e.Position["y"]
+	newPosition := map[string]int{}
+	if xDisplacement == 0 { // then move y
+		if yDisplacement < 0 {
+			newPosition["y"] = e.Position["y"] - e.Speed
+		} else {
+			newPosition["y"] = e.Position["y"] + e.Speed
+		}
+		newPosition["x"] = e.Position["x"]
+	} else if yDisplacement == 0 { // then move x
+		if xDisplacement < 0 {
+			newPosition["x"] = e.Position["x"] - e.Speed
+		} else {
+			newPosition["x"] = e.Position["x"] + e.Speed
+		}
+		newPosition["y"] = e.Position["y"]
+	} else {
+		if utils.RandBool(){ // move x
+			if xDisplacement < 0 {
+				newPosition["x"] = e.Position["x"] - e.Speed
+			} else {
+				newPosition["x"] = e.Position["x"] + e.Speed
+			}
+			newPosition["y"] = e.Position["y"]
+		} else { // move y
+			if yDisplacement < 0 {
+				newPosition["y"] = e.Position["y"] - e.Speed
+			} else {
+				newPosition["y"] = e.Position["y"] + e.Speed
+			}
+			newPosition["x"] = e.Position["x"]
+		}
 	}
-	angle := math.Atan2(float64(PlayerPosition["y"]-e.Position["y"]), float64(PlayerPosition["x"]-e.Position["x"]))
-	newX := e.Position["x"] + int(math.Cos(angle)*float64(e.Speed))
-	newY := e.Position["y"] + int(math.Sin(angle)*float64(e.Speed))
-	return map[string]int{
-		"x": newX, 
-		"y": newY,
-	}
+	return newPosition
 }
-
 
 func (e *EnemyCharacter) SetPosition(newPosition map[string]int){
 	e.Position = newPosition

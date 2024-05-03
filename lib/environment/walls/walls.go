@@ -1,6 +1,3 @@
-// FUA 
-	// add method for innerwalls that randomises the inner walls under GenerateInnerWalls later
-
 package walls
 
 import (
@@ -59,6 +56,5 @@ func NewInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 }
 
 func (n InnerWalls) GenerateInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int) {
-	// FUA add logic here to populate and randomise inner wall configuration --> WORK THIS OUT LAST
 	fmt.Println("Inner walls have been randomly generated")
 }

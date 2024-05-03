@@ -5,6 +5,8 @@ import (
     "fmt"
     "os"
     "math"
+	"math/rand"
+	"time"
 )
 
 func Test() {
@@ -51,4 +53,9 @@ func ColumnRowProximity(Haystack []map[string]int, Needle map[string]int, tolera
         } else {}
     }
     return false
+}
+
+func RandBool() bool {
+    rand.Seed(time.Now().UnixNano())
+    return rand.Intn(2) == 1
 }
