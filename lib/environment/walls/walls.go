@@ -42,7 +42,7 @@ func (b *BoundaryWalls) GenerateBoundaryWalls() { // note this has to be a point
 			}
 		}
 	}
-	fmt.Println("Boundary walls have been generated")
+	// fmt.Println("Boundary walls have been generated")
 }
 
 func NewInnerWalls(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int) *InnerWalls {

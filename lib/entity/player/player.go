@@ -21,7 +21,7 @@ type PlayerCharacter struct {
 }
 
 func NewPlayerCharacter(name string, positionX int, positionY int, minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, numTorches int) *PlayerCharacter {
-	fmt.Println("Player Character", name, "initialised, current coordinates are:", positionX, positionY)
+	// fmt.Println("Player Character", name, "initialised, current coordinates are:", positionX, positionY)
 	return &PlayerCharacter{ 
 		Name: name, 
 		Speed: 1,
@@ -60,14 +60,14 @@ func (p *PlayerCharacter) MoveLeft(WallPositions []map[string]int, TorchPosition
 	p.Position["x"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] += p.Speed
-		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		// fmt.Println("Wall hit, current coordinates are:", p.Position)
 		return false
 	} else if p.CheckPickup(TorchPositions) { // torch picked up
 		p.GetTorch(1)
-		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		// fmt.Println("Torch picked up, current coordinates are:", p.Position)		
 		return true
 	} else { // no collision
-		fmt.Println("Moved one cell left, current coordinates are:", p.Position)
+		// fmt.Println("Moved one cell left, current coordinates are:", p.Position)
 		return false
 	}
 }
@@ -76,14 +76,14 @@ func (p *PlayerCharacter) MoveRight(WallPositions []map[string]int, TorchPositio
 	p.Position["x"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["x"] -= p.Speed
-		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		// fmt.Println("Wall hit, current coordinates are:", p.Position)
 		return false
 	} else if p.CheckPickup(TorchPositions) { // torch picked up
 		p.GetTorch(1)
-		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		// fmt.Println("Torch picked up, current coordinates are:", p.Position)		
 		return true
 	} else { // no collision
-		fmt.Println("Moved one cell right, current coordinates are:", p.Position)
+		// fmt.Println("Moved one cell right, current coordinates are:", p.Position)
 		return false
 	}
 }
@@ -92,14 +92,14 @@ func (p *PlayerCharacter) MoveUp(WallPositions []map[string]int, TorchPositions 
 	p.Position["y"] -= p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] += p.Speed
-		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		// fmt.Println("Wall hit, current coordinates are:", p.Position)
 		return false
 	} else if p.CheckPickup(TorchPositions) { // torch picked up
 		p.GetTorch(1)
-		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		// fmt.Println("Torch picked up, current coordinates are:", p.Position)		
 		return true
 	} else { // no collision
-		fmt.Println("Moved one cell up, current coordinates are:", p.Position)
+		// fmt.Println("Moved one cell up, current coordinates are:", p.Position)
 		return false
 	}
 }
@@ -108,14 +108,14 @@ func (p *PlayerCharacter) MoveDown(WallPositions []map[string]int, TorchPosition
 	p.Position["y"] += p.Speed
 	if p.CheckCollision(WallPositions) { // there's a collision
 		p.Position["y"] -= p.Speed
-		fmt.Println("Wall hit, current coordinates are:", p.Position)
+		// fmt.Println("Wall hit, current coordinates are:", p.Position)
 		return false
 	} else if p.CheckPickup(TorchPositions) { // torch picked up
 		p.GetTorch(1)
-		fmt.Println("Torch picked up, current coordinates are:", p.Position)		
+		// fmt.Println("Torch picked up, current coordinates are:", p.Position)		
 		return true
 	} else { // no collision
-		fmt.Println("Moved one cell down, current coordinates are:", p.Position)
+		// fmt.Println("Moved one cell down, current coordinates are:", p.Position)
 		return false
 	}
 }
@@ -131,7 +131,7 @@ func (p PlayerCharacter) TakeDamage(damage int){
 
 func (p *PlayerCharacter) GetTorch(numTorches int){
 	p.NumTorches += numTorches
-	fmt.Println("Player picked up", numTorches, "torches, and now has", p.NumTorches, "torches")
+	// fmt.Println("Player picked up", numTorches, "torches, and now has", p.NumTorches, "torches")
 }
 
 func (p *PlayerCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int){

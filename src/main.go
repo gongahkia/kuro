@@ -1,5 +1,6 @@
 // FUA
     // add a title screen with the instructions, "find the torches before time runs out", "don't get caught by bob"
+    // further add a prompt that BOB IS CHASING YOU when he is within render view
 
 package main
 
@@ -58,7 +59,7 @@ func main() {
 
     b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     b1.GenerateBoundaryWalls()
-    fmt.Println(b1.Positions) 
+    // fmt.Println(b1.Positions) 
 
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
@@ -67,7 +68,7 @@ func main() {
 
     t1 := light.NewTorches(maxNumberTorches)
     t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position) 
-    fmt.Println(t1.Positions)
+    // fmt.Println(t1.Positions)
 
     e1 := enemy.NewEnemyCharacter(enemySpeed, enemyHealth, enemyStartingCoordinates, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     e1.GetRandomSpawnCoordinates(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, p1.Position, t1.Positions)
@@ -77,7 +78,7 @@ func main() {
     for {
         // debug info
         fmt.Println("num torches are", p1.NumTorches)
-        fmt.Println(t1)
+        // fmt.Println(t1)
 
         // render graphics
         if p1.NumTorches > 0 { // has a torch
@@ -104,7 +105,7 @@ func main() {
 
         // enemy movement
         e1.SetPosition(e1.GetNextMove(p1.Position))
-        fmt.Println("enemy moved to current coordinate:", e1.Position)
+        // fmt.Println("enemy moved to current coordinate:", e1.Position)
 
         // process player input
         var keyPress rune
@@ -112,25 +113,25 @@ func main() {
         switch keyPress{
 
             case 119:
-                fmt.Println("Moving up")
+                // fmt.Println("Moving up")
                 if p1.MoveUp(b1.Positions, t1.Positions) {
                     t1.TorchPickedUp(p1.Position)
                 } else {}
 
             case 97:
-                fmt.Println("Moving left")
+                // fmt.Println("Moving left")
                 if p1.MoveLeft(b1.Positions, t1.Positions) {
                     t1.TorchPickedUp(p1.Position)
                 } else {}
 
             case 115:
-                fmt.Println("Moving down")
+                // fmt.Println("Moving down")
                 if p1.MoveDown(b1.Positions, t1.Positions) {
                     t1.TorchPickedUp(p1.Position)
                 } else {}
 
             case 100:
-                fmt.Println("Moving right")
+                // fmt.Println("Moving right")
                 if p1.MoveRight(b1.Positions, t1.Positions) {
                     t1.TorchPickedUp(p1.Position)
                 } else {}

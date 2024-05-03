@@ -19,7 +19,7 @@ type EnemyCharacter struct {
 }
 
 func NewEnemyCharacter(EnemySpeed int, EnemyHealth int, EnemyPosition map[string]int, minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int) *EnemyCharacter {
-	fmt.Println("Enemy initialised, current coordinates are:", EnemyPosition["x"], EnemyPosition["y"])
+	// fmt.Println("Enemy initialised, current coordinates are:", EnemyPosition["x"], EnemyPosition["y"])
 	return &EnemyCharacter{ 
 		Speed: EnemySpeed,
 		Health: EnemyHealth,
@@ -79,6 +79,7 @@ func (e *EnemyCharacter) SetPosition(newPosition map[string]int){
 
 func (e *EnemyCharacter) ChangeSpeed(newSpeed int){
 	e.Speed = newSpeed
+	fmt.Println("enemy speed has been changed to", e.Speed)
 }
 
 func (e *EnemyCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, TorchPositions []map[string]int){

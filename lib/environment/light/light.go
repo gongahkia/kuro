@@ -1,7 +1,6 @@
 package light
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 	"os"
@@ -14,7 +13,7 @@ type Torches struct {
 }
 
 func NewTorches(maxNumberTorches int) *Torches{
-	fmt.Println("Torches have been generated")
+	// fmt.Println("Torches have been generated")
 	return &Torches{
 		MaxNumberTorches: maxNumberTorches,
 		Positions: []map[string]int{},
