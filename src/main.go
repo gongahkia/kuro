@@ -1,10 +1,13 @@
 // FUA
+
     // figure out how to render lighting with and without a torch
         // without torch => surrounding 8 cells
+        // write a function to do this for me, just ensure that the function takes in an unspecified height and length and the current coordinates and generates all coordinates within the square shape as neededa
             // LLL
             // L@L
             // LLL
         // with torch => diamond shape of 3 cells in length and height each side is in light 
+        // write a function to do this for me, just ensure that the function takes in an unspecified height and length and the current coordinates and generates all coordinates within the diamond shape as needed
             //    L
             //   LLL
             //  LLLLL
@@ -12,6 +15,7 @@
             //  LLLLL
             //   LLL
             //    L
+
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
     // implement enemey path finding they can see you
     // allow for size of arena to be dynamically changed and a fixed formula to be used to calculate the resulting number of torches and subsequent dithering 
