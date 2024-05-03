@@ -1,7 +1,6 @@
 // FUA
     // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
     // ensure that the inner wall randomness comes BEFORE the torches spawn in
-    // fix the random torch posiiton spawn algorithm
     // figure out how to render lighting with and without a torch
     // work out rendering of inner walls
     // make it so you start taking damage when you've been in darkness for a while
@@ -39,8 +38,6 @@ func main() {
     var playerStartingYCoordinate int
     var maxNumberTorches int
     var numStartingTorches int
-    var TorchSpawnProbability int
-    var TorchSpawnTolerance int
 
     minXCoordinateWalls = 0
     maxXCoordinateWalls = 16
@@ -50,8 +47,6 @@ func main() {
     playerStartingYCoordinate = 1
     numStartingTorches = 0
     maxNumberTorches = 3
-    TorchSpawnProbability = 20
-    TorchSpawnTolerance = 5
 
     b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     b1.GenerateBoundaryWalls()
@@ -62,7 +57,7 @@ func main() {
     p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
 
     t1 := light.NewTorches(maxNumberTorches)
-    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position, TorchSpawnProbability, TorchSpawnTolerance) // FUA this should eventually take a combined slice of boundary and interior walls
+    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position) // FUA this should eventually take a combined slice of boundary and interior walls
     fmt.Println(t1.Positions)
 
     // --- game loop ---

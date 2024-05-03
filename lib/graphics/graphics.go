@@ -43,6 +43,8 @@ func Draw(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls 
 	}
 }
 
+/*
+
 func Deserialize(filePath string, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)[]map[string]int{
 	// FUA
 		// finish up this function to read a txt file for random shape generation to be randomly placed within other files and return a bunch of coordinates
@@ -51,3 +53,5 @@ func Deserialize(filePath string, minXCoordinateWalls, maxXCoordinateWalls, minY
 			// is there some secret math hack i can use here?
 			// google whether it is possible to write a go function that either does the thing I want, or throws an error if execution fails
 }
+
+*/
