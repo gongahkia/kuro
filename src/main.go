@@ -1,8 +1,15 @@
 // FUA
-
-    // work out why wall rendering graphics are buggy now, i wanna be able to see wall edges when im near them, not darkness
+    // work out why wall rendering graphics are buggy now with the new light logic, i wanna be able to see wall edges when im near them, not darkness
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
     // implement enemey path finding they can see you
+    // should i add a weight factor to this game?
+        // then make weight reduce speed where speed is relative so each time you pick up or drop an item the item is a physical object that spawns in
+        // also if you move slower then enemy speed just increases so they clear more tiles in a given turn (eg. increase speed 1 to 2 so every time u move one cell they move two)
+        // figure out attacks and health system
+    // do i want to add multiple rooms?
+        // where each time you clear a room you have to choose a new buff for the enemy instead of a buff for yourself
+        // highscore system where it saves to a json
+        // unique deathscreen
     // allow for size of arena to be dynamically changed and a fixed formula to be used to calculate the resulting number of torches and subsequent dithering 
     // work out rendering of inner walls
         // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
