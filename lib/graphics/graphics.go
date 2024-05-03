@@ -22,7 +22,7 @@ func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinat
 
 	visibleShader = IlluminatedNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
 
-	fmt.Println("Drawing world")
+	// fmt.Println("Drawing world")
 	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
 		for x := minXCoordinateWalls; x <= maxXCoordinateWalls; x++{
 			curr := map[string]int{
@@ -66,7 +66,7 @@ func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordin
 
 	visibleShader = IlluminatedWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, WallPositions, lengthHeightIllumination)
 
-	fmt.Println("Drawing world")
+	// fmt.Println("Drawing world")
 	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
 		for x := minXCoordinateWalls; x <= maxXCoordinateWalls; x++{
 			curr := map[string]int{
@@ -103,7 +103,7 @@ func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordina
 	// Cyan := color.New(color.FgCyan)
 	// White := color.New(color.FgWhite)
 
-	fmt.Println("Drawing world")
+	// fmt.Println("Drawing world")
 	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
 		for x := minXCoordinateWalls; x <= maxXCoordinateWalls; x++{
 			curr := map[string]int{

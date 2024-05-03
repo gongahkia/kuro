@@ -76,8 +76,10 @@ func main() {
     // --- game loop ---
 
     for {
+        // ansi escape code clears screen
+        fmt.Print("\033[H\033[2J")
+
         // debug info
-        fmt.Println("num torches are", p1.NumTorches)
         // fmt.Println(t1)
 
         // render graphics
@@ -87,8 +89,12 @@ func main() {
             graphics.DrawNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position, lengthHeightIlluminationNoTorch)
         } else {} // weird edge case (should never be hit)
 
+        // hud info
+        fmt.Println("Num torches collected:", p1.NumTorches)
+
         // win condition
         if len(t1.Positions) == 0 {
+            fmt.Print("\033[H\033[2J")
             graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
             fmt.Println("Congratulations", p1.Name, ",you have collected all the torches. \nYou win!")
             fmt.Println("Closing window")
@@ -97,6 +103,7 @@ func main() {
 
         // lose condition
         if e1.Position["x"] == p1.Position["x"] && e1.Position["y"] == p1.Position["y"] {
+            fmt.Print("\033[H\033[2J")
             graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, e1.Position)
             fmt.Println("Oh no", p1.Name, ",you have been caught by Bob. \nTry again next time!")
             fmt.Println("Closing window")

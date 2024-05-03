@@ -87,8 +87,8 @@ func (e *EnemyCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxX
 	var currY int
 	rand.Seed(time.Now().UnixNano()^int64(os.Getpid())^int64(rand.Intn(10000)))
 	for {
-		currX = utils.RandomNumber(minXCoordinateWalls, maxXCoordinateWalls)
-		currY = utils.RandomNumber(minYCoordinateWalls, maxYCoordinateWalls)
+		currX = utils.RandomNumber(minXCoordinateWalls + 1, maxXCoordinateWalls)
+		currY = utils.RandomNumber(minYCoordinateWalls + 1, maxYCoordinateWalls)
 		if currX != PlayerPosition["x"] && currY != PlayerPosition["y"] && !utils.Contains(TorchPositions, map[string]int{"x": currX, "y": currY}){
 			break	
 		} else {}
