@@ -22,6 +22,7 @@
     // work out rendering of inner walls
         // perhaps screw the randomness for inner wall generation and just add a folder of txt files and a serialize function that reads a txt file and randomly places structures around the map if there is space
         // ensure that the inner wall randomness comes BEFORE the torches spawn in
+    // to add unit tests later and update makefile accordingly
 
 package main
 
