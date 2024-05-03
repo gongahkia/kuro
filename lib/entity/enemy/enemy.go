@@ -3,6 +3,9 @@ package enemy
 import (
 	"fmt"
 	"kuro/lib/utils"
+	"math/rand"
+	"time"
+	"os"
 )
 
 type EnemyCharacter struct {
@@ -76,4 +79,21 @@ func (e *EnemyCharacter) SetPosition(newPosition map[string]int){
 
 func (e *EnemyCharacter) ChangeSpeed(newSpeed int){
 	e.Speed = newSpeed
+}
+
+func (e *EnemyCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, TorchPositions []map[string]int){
+	var currX int
+	var currY int
+	rand.Seed(time.Now().UnixNano()^int64(os.Getpid())^int64(rand.Intn(10000)))
+	for {
+		currX = utils.RandomNumber(minXCoordinateWalls, maxXCoordinateWalls)
+		currY = utils.RandomNumber(minYCoordinateWalls, maxYCoordinateWalls)
+		if currX != PlayerPosition["x"] && currY != PlayerPosition["y"] && !utils.Contains(TorchPositions, map[string]int{"x": currX, "y": currY}){
+			break	
+		} else {}
+	}
+	e.Position = map[string]int{
+		"x": currX,
+		"y": currY,
+	}
 }

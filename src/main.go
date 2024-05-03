@@ -1,5 +1,4 @@
 // FUA
-    // randomise player and enemey spawn location
     // add a title screen with the instructions, "find the torches before time runs out", "don't get caught by bob"
 
 package main
@@ -44,16 +43,16 @@ func main() {
     maxXCoordinateWalls = 16
     minYCoordinateWalls = 0
     maxYCoordinateWalls = 16
-    playerStartingXCoordinate = 1
-    playerStartingYCoordinate = 1
+    playerStartingXCoordinate = 0 // this will be reassigned anyway
+    playerStartingYCoordinate = 0 // this will be reassigned anyway
     numStartingTorches = 0
     maxNumberTorches = 3
     lengthHeightIlluminationNoTorch = 2
     lengthHeightIlluminationWithTorch = 3
-    enemyStartingCoordinates = map[string]int{
-        "x": 12,
-        "y": 12,
-    }
+    // enemyStartingCoordinates = map[string]int{
+    //     "x": 12,
+    //     "y": 12,
+    // }
     enemySpeed = 1
     enemyHealth = 1
 
@@ -64,12 +63,14 @@ func main() {
     fmt.Println("Enter player name: ")
     playerName = utils.ReadInput()
     p1 := player.NewPlayerCharacter(playerName, playerStartingXCoordinate, playerStartingYCoordinate, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, numStartingTorches)
+    p1.GetRandomSpawnCoordinates(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
 
     t1 := light.NewTorches(maxNumberTorches)
-    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position) // FUA this should eventually take a combined slice of boundary and interior walls
+    t1.GenerateTorchPositions(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, p1.Position) 
     fmt.Println(t1.Positions)
 
     e1 := enemy.NewEnemyCharacter(enemySpeed, enemyHealth, enemyStartingCoordinates, minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
+    e1.GetRandomSpawnCoordinates(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, p1.Position, t1.Positions)
 
     // --- game loop ---
 

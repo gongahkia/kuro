@@ -21,10 +21,6 @@ func NewTorches(maxNumberTorches int) *Torches{
 	}
 }
 
-func randomNumber(min, max int) int {
-    return rand.Intn(max-min+1) + min
-}
-
 func (t *Torches) GenerateTorchPositions(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, PlayerPosition map[string]int){ 
 	var tempCount int
 	tempCount = 0
@@ -33,8 +29,8 @@ func (t *Torches) GenerateTorchPositions(minXCoordinateWalls int, maxXCoordinate
 		if tempCount == t.MaxNumberTorches {
 			return
 		} else {
-			x := randomNumber(minXCoordinateWalls, maxXCoordinateWalls)
-			y := randomNumber(minYCoordinateWalls, maxYCoordinateWalls)
+			x := utils.RandomNumber(minXCoordinateWalls, maxXCoordinateWalls)
+			y := utils.RandomNumber(minYCoordinateWalls, maxYCoordinateWalls)
 			curr := map[string]int{
 				"x": x,
 				"y": y,

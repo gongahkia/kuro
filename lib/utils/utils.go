@@ -59,3 +59,7 @@ func RandBool() bool {
     rand.Seed(time.Now().UnixNano())
     return rand.Intn(2) == 1
 }
+
+func RandomNumber(min int, max int) int {
+    return rand.Intn(max-min+1) + min
+}

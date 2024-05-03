@@ -2,6 +2,10 @@ package player
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
+	"os"
+	"kuro/lib/utils"
 )
 
 type PlayerCharacter struct {
@@ -128,4 +132,12 @@ func (p PlayerCharacter) TakeDamage(damage int){
 func (p *PlayerCharacter) GetTorch(numTorches int){
 	p.NumTorches += numTorches
 	fmt.Println("Player picked up", numTorches, "torches, and now has", p.NumTorches, "torches")
+}
+
+func (p *PlayerCharacter) GetRandomSpawnCoordinates(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int){
+	rand.Seed(time.Now().UnixNano()^int64(os.Getpid())^int64(rand.Intn(10000)))
+	p.Position = map[string]int{
+		"x": utils.RandomNumber(minXCoordinateWalls, maxXCoordinateWalls),
+		"y": utils.RandomNumber(minYCoordinateWalls, maxYCoordinateWalls),
+	}
 }
