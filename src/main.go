@@ -1,21 +1,6 @@
 // FUA
 
-    // figure out how to render lighting with and without a torch
-        // without torch => surrounding 8 cells
-        // write a function to do this for me, just ensure that the function takes in an unspecified height and length and the current coordinates and generates all coordinates within the square shape as neededa
-            // LLL
-            // L@L
-            // LLL
-        // with torch => diamond shape of 3 cells in length and height each side is in light 
-        // write a function to do this for me, just ensure that the function takes in an unspecified height and length and the current coordinates and generates all coordinates within the diamond shape as needed
-            //    L
-            //   LLL
-            //  LLLLL
-            // LLL@LLL
-            //  LLLLL
-            //   LLL
-            //    L
-
+    // work out why wall rendering graphics are buggy now, i wanna be able to see wall edges when im near them, not darkness
     // make it so that enemies start spawning in the darkness and you can't see them but a red exclamation mark spawns when they spawn in 
     // implement enemey path finding they can see you
     // allow for size of arena to be dynamically changed and a fixed formula to be used to calculate the resulting number of torches and subsequent dithering 
@@ -56,6 +41,8 @@ func main() {
     var playerStartingYCoordinate int
     var maxNumberTorches int
     var numStartingTorches int
+    var lengthHeightIlluminationNoTorch int
+    var lengthHeightIlluminationWithTorch int
 
     minXCoordinateWalls = 0
     maxXCoordinateWalls = 16
@@ -65,6 +52,8 @@ func main() {
     playerStartingYCoordinate = 1
     numStartingTorches = 0
     maxNumberTorches = 3
+    lengthHeightIlluminationNoTorch = 2
+    lengthHeightIlluminationWithTorch = 3
 
     b1 := walls.NewBoundaryWalls(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls)
     b1.GenerateBoundaryWalls()
@@ -86,11 +75,16 @@ func main() {
         fmt.Println(t1)
 
         // render graphics
-        graphics.Draw(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position)
+        if p1.NumTorches > 0 { // has a torch
+            graphics.DrawWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, lengthHeightIlluminationWithTorch)
+        } else if p1.NumTorches == 0 { // has no torch
+            graphics.DrawNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position, lengthHeightIlluminationNoTorch)
+        } else {} // weird edge case (should never be hit)
 
         // win condition
         if len(t1.Positions) == 0 {
-            fmt.Println("Congratulations", p1.Name, ",you have collected all the keys. \nYou win!")
+            graphics.DrawNoShader(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, b1.Positions, t1.Positions, p1.Position)
+            fmt.Println("Congratulations", p1.Name, ",you have collected all the torches. \nYou win!")
             fmt.Println("Closing window")
             os.Exit(0)
         }

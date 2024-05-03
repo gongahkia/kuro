@@ -10,9 +10,90 @@ import (
 	"github.com/fatih/color"
 )
 
-func Draw(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+func DrawNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+	// variable initialisation
+	var visibleShader []map[string]int
 
 	// color initialisation
+
+	Red := color.New(color.FgRed, color.Bold)
+	Green := color.New(color.FgGreen)
+	Yellow := color.New(color.FgYellow)
+	White := color.New(color.FgWhite)
+	// Blue := color.New(color.FgBlue)
+	// Magenta := color.New(color.FgMagenta)
+	// Cyan := color.New(color.FgCyan)
+
+	visibleShader = IlluminatedNoTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, lengthHeightIllumination)
+
+	fmt.Println("Drawing world")
+	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
+		for x := minXCoordinateWalls; x <= maxXCoordinateWalls; x++{
+			curr := map[string]int{
+				"x": x,
+				"y": y,
+			}
+			if utils.Contains(visibleShader, curr){ // coordinate is visible so draw appropriate character
+				if utils.Contains(WallPositions, curr) { // wall found at current position, so draw wall
+					Red.Print("#")
+				} else if curr["x"] == PlayerPosition["x"] && curr["y"] == PlayerPosition["y"] { // player found at current position, so draw player
+					Green.Print("@")
+				} else if utils.Contains(TorchPositions, curr) { // torches found at current position, so draw torch
+					Yellow.Print("!")
+				} else { // nothing found at current position, so draw empty space
+					fmt.Printf(" ")
+				}
+			} else { // coordinate is not visible so draw darkness
+				White.Print("*")
+			}
+		}
+		fmt.Printf("\n")
+	}
+}
+
+func DrawWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int, lengthHeightIllumination int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
+
+	// variable initialisation
+	var visibleShader []map[string]int
+
+	// color initialisation
+
+	Red := color.New(color.FgRed, color.Bold)
+	Green := color.New(color.FgGreen)
+	Yellow := color.New(color.FgYellow)
+	White := color.New(color.FgWhite)
+	// Blue := color.New(color.FgBlue)
+	// Magenta := color.New(color.FgMagenta)
+	// Cyan := color.New(color.FgCyan)
+
+	visibleShader = IlluminatedWithTorch(minXCoordinateWalls, maxXCoordinateWalls, minYCoordinateWalls, maxYCoordinateWalls, PlayerPosition, lengthHeightIllumination)
+
+	fmt.Println("Drawing world")
+	for y := minYCoordinateWalls; y <= maxYCoordinateWalls; y++{
+		for x := minXCoordinateWalls; x <= maxXCoordinateWalls; x++{
+			curr := map[string]int{
+				"x": x,
+				"y": y,
+			}
+			if utils.Contains(visibleShader, curr){ // coordinate is visible so draw appropriate character
+				if utils.Contains(WallPositions, curr) { // wall found at current position, so draw wall
+					Red.Print("#")
+				} else if curr["x"] == PlayerPosition["x"] && curr["y"] == PlayerPosition["y"] { // player found at current position, so draw player
+					Green.Print("@")
+				} else if utils.Contains(TorchPositions, curr) { // torches found at current position, so draw torch
+					Yellow.Print("!")
+				} else { // nothing found at current position, so draw empty space
+					fmt.Printf(" ")
+				}
+			} else { // coordinate is not visible so draw darkness
+				White.Print("*")
+			}
+		}
+		fmt.Printf("\n")
+	}
+}
+
+func DrawNoShader(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, WallPositions []map[string]int, TorchPositions []map[string]int, PlayerPosition map[string]int) { // FUA wallpositions here to be a combined array of both boundary and inner walls
 
 	Red := color.New(color.FgRed, color.Bold)
 	Green := color.New(color.FgGreen)
