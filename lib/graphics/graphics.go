@@ -68,7 +68,7 @@ func IlluminatedNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCo
 		for x := currX - lengthHeightIllumination; x <= currX + lengthHeightIllumination; x++ {
 			curr := map[string]int{
 				"x": x,
-				"y": y
+				"y": y,
 			}
 			fin = append(fin, curr)
 		}
@@ -77,13 +77,13 @@ func IlluminatedNoTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCo
 }
 
 func IlluminatedWithTorch(minXCoordinateWalls int, maxXCoordinateWalls int, minYCoordinateWalls int, maxYCoordinateWalls int, PlayerPosition map[string]int, lengthHeightIllumination int) []map[string]int {
-    currX := playerPosition["x"]
-    currY := playerPosition["y"]
+    currX := PlayerPosition["x"]
+    currY := PlayerPosition["y"]
     fin := []map[string]int{}
 
     for x := -lengthHeightIllumination; x <= lengthHeightIllumination; x++ {
         for y := -lengthHeightIllumination; y <= lengthHeightIllumination; y++ {
-            if abs(x) + abs(y) <= lengthHeightIllumination {
+            if Abs(x) + Abs(y) <= lengthHeightIllumination {
                 fin = append(fin, map[string]int{"x": currX + x, "y": currY + y})
             }
         }
