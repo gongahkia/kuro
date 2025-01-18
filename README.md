@@ -2,9 +2,7 @@
 
 # `kuro`
 
-* small cli roguelike
-* made in go
-* find all the torches
+Everything is cast in shadow. Something is chasing you. Find all the torches.
 
 ## installation
 
