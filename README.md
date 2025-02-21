@@ -2,7 +2,12 @@
 
 # `kuro`
 
-Everything is cast in shadow. Something is chasing you. Find all the torches.
+<div align="center">
+    <p>
+    Everything is cast in shadow. Something is chasing you. Find all the torches.
+    </p>
+    <img src="./asset/banner.png" width="40%">
+</div>
 
 ## installation
 
