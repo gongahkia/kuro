@@ -1,16 +1,19 @@
-all: build
+all: run
 
-build:src/main.go
-	@go run src/main.go
+run:
+	@go run ./src
 
-config:
-	@sudo apt upgrade && sudo apt update && sudo apt autoremove
-	@sudo apt install golang
+test:
+	@go test ./...
+
+soak:
+	@go test ./internal/game -run TestAutomatedSoakAcrossSeedsAndDifficulties
+
+tidy:
 	@go mod tidy
 
-clean:
-	@rm -rf .git .gitignore README.md
+config:
+	@printf "Install Go locally, then run 'make tidy' and 'make run'.\n"
 
-up:
-	@git pull
-	@git status
+clean:
+	@go clean ./...
