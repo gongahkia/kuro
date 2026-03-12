@@ -15,7 +15,7 @@
 ## how to play
 
 ```console
-$ git clone https://github.com/gongahkia/kuro
+$ git clone https://github.com/gongahkia/kuro && cd kuro
 $ cd kuro
 $ make tidy
 $ make run
