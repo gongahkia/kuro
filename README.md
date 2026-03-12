@@ -1,4 +1,5 @@
-![](https://img.shields.io/badge/kuro_v2-passing-green)
+[![](https://img.shields.io/badge/kuro_v1-passing-light_green)](https://github.com/gongahkia/kuro/releases/tag/1)
+[![](https://img.shields.io/badge/kuro_v2-passing-green)](https://github.com/gongahkia/kuro/releases/tag/2)
 
 # `Kuro`
 
