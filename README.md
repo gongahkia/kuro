@@ -12,7 +12,7 @@
     <img src="./asset/banner.png" width="40%">
 </div>
 
-## play
+## how to play
 
 ```console
 $ git clone https://github.com/gongahkia/kuro
@@ -23,6 +23,6 @@ $ make test
 $ make soak
 ```
 
-## configure
+## how to configure
 
-`Kuro` supports [difficulty scaling]() *(Apprentice, Stalker, Nightmare)* and [seeded runs]().
+`Kuro` supports [difficulty scaling](./internal/game/) *(Apprentice, Stalker, Nightmare)* and [seeded runs](./internal/game/).
