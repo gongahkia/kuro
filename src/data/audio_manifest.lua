@@ -1,0 +1,17 @@
+return {
+	{ name = "burst", path = "assets/sfx/burst.ogg", kind = "sfx" },
+	{ name = "flare_throw", path = "assets/sfx/flare.ogg", kind = "sfx" },
+	{ name = "player_hit", path = "assets/sfx/hit.ogg", kind = "sfx" },
+	{ name = "door_open", path = "assets/sfx/door.ogg", kind = "sfx" },
+	{ name = "pickup_torch", path = "assets/sfx/torch.ogg", kind = "sfx" },
+	{ name = "enemy_death", path = "assets/sfx/enemy_death.ogg", kind = "sfx" },
+	{ name = "enemy_stalker_idle", path = "assets/sfx/stalker_idle.ogg", kind = "positional" },
+	{ name = "enemy_rusher_charge", path = "assets/sfx/rusher_charge.ogg", kind = "positional" },
+	{ name = "anchor_lit", path = "assets/sfx/anchor.ogg", kind = "sfx" },
+	{ name = "ambient_floor1", path = "assets/ambient/floor1.ogg", kind = "ambient" },
+	{ name = "ambient_floor2", path = "assets/ambient/floor2.ogg", kind = "ambient" },
+	{ name = "ambient_boss", path = "assets/ambient/boss.ogg", kind = "ambient" },
+	{ name = "boss_phase1", path = "assets/music/boss1.ogg", kind = "music" },
+	{ name = "boss_phase2", path = "assets/music/boss2.ogg", kind = "music" },
+	{ name = "boss_phase3", path = "assets/music/boss3.ogg", kind = "music" },
+}

@@ -280,6 +280,136 @@ local function build_standard_floor(config, rng)
 		enemy_budget = enemy_budget - cost
 	end
 
+	-- environmental storytelling
+	meta.decorations = meta.decorations or {}
+	local note_texts = {
+		"They promised safety below. They lied.",
+		"Day 4. The torch is dimmer. Or my eyes are failing.",
+		"If you find this, do not follow the singing.",
+		"The exit moved. I am sure of it.",
+		"Kael went ahead. Kael did not come back.",
+	}
+	for _, room in ipairs(candidate_rooms) do
+		if rng:chance(0.3) then -- note
+			local cell = pick_room_cell(room, rng, reserved)
+			meta.pickups[#meta.pickups + 1] = {
+				kind = "note",
+				cell = { x = cell.x, y = cell.y },
+				text = note_texts[rng:int(1, #note_texts)],
+			}
+			reserved[cell.x .. ":" .. cell.y] = true
+		end
+		if rng:chance(0.15) then -- corpse
+			local cell = pick_room_cell(room, rng, reserved)
+			meta.decorations[#meta.decorations + 1] = {
+				kind = "corpse",
+				cell = { x = cell.x, y = cell.y },
+				x = cell.x - 0.5,
+				y = cell.y - 0.5,
+			}
+		end
+		if rng:chance(0.25) then -- flicker tag
+			local cell = pick_room_cell(room, rng, reserved)
+			if cell.x >= 1 and cell.x <= meta.width and cell.y >= 1 and cell.y <= meta.height then
+				meta.cells[cell.y][cell.x].tags.flicker = true
+			end
+		end
+	end
+	-- blood trails
+	if rng:chance(0.4) then
+		local room = candidate_rooms[rng:int(1, #candidate_rooms)]
+		local start_cell = pick_room_cell(room, rng, reserved)
+		for trail_i = 0, rng:int(2, 4) do
+			local bx, by = start_cell.x + trail_i, start_cell.y
+			if bx >= 1 and bx <= meta.width and by >= 1 and by <= meta.height and meta.cells[by][bx].walkable then
+				meta.decorations[#meta.decorations + 1] = {
+					kind = "blood_trail",
+					cell = { x = bx, y = by },
+					x = bx - 0.5,
+					y = by - 0.5,
+				}
+			end
+		end
+	end
+
+	-- ration placement (1-2 per floor)
+	local ration_count = rng:int(1, 2)
+	for _ = 1, ration_count do
+		local room = candidate_rooms[rng:int(1, #candidate_rooms)]
+		local cell = pick_room_cell(room, rng, reserved)
+		meta.pickups[#meta.pickups + 1] = {
+			kind = "ration",
+			cell = { x = cell.x, y = cell.y },
+		}
+		reserved[cell.x .. ":" .. cell.y] = true
+	end
+
+	-- secret rooms (1-2 per floor, using door system)
+	meta.secret_walls = meta.secret_walls or {}
+	local secret_attempts = rng:int(1, 2)
+	for _ = 1, secret_attempts do
+		local source_room = candidate_rooms[rng:int(1, #candidate_rooms)]
+		local edge_cell = nil
+		local secret_cell = nil
+		for _, cell in ipairs(source_room.cells) do
+			for _, dir in ipairs({ { dx = 0, dy = -1 }, { dx = 0, dy = 1 }, { dx = -1, dy = 0 }, { dx = 1, dy = 0 } }) do
+				local nx, ny = cell.x + dir.dx, cell.y + dir.dy
+				local sx, sy = nx + dir.dx, ny + dir.dy -- cell behind the wall
+				if nx >= 2 and nx < meta.width and ny >= 2 and ny < meta.height
+					and sx >= 2 and sx < meta.width and sy >= 2 and sy < meta.height
+					and not meta.cells[ny][nx].walkable and not meta.cells[sy][sx].walkable then
+					local blocked = false
+					for dy2 = -1, 1 do
+						for dx2 = -1, 1 do
+							local check_y, check_x = sy + dy2, sx + dx2
+							if check_y >= 1 and check_y <= meta.height and check_x >= 1 and check_x <= meta.width then
+								if meta.cells[check_y][check_x].walkable then blocked = true end
+							end
+						end
+					end
+					if not blocked then
+						edge_cell = { x = nx, y = ny }
+						secret_cell = { x = sx, y = sy }
+					end
+				end
+			end
+			if secret_cell then break end
+		end
+		if edge_cell and secret_cell then
+			mark_cell(meta, edge_cell.x, edge_cell.y, "secret_passage")
+			mark_cell(meta, secret_cell.x, secret_cell.y, "secret_room")
+			local adjacent_walkable = nil -- find the walkable cell adjacent to edge_cell
+			for _, dir in ipairs({ { dx = 0, dy = -1 }, { dx = 0, dy = 1 }, { dx = -1, dy = 0 }, { dx = 1, dy = 0 } }) do
+				local ax, ay = edge_cell.x + dir.dx, edge_cell.y + dir.dy
+				if ax ~= secret_cell.x or ay ~= secret_cell.y then
+					if ax >= 1 and ax <= meta.width and ay >= 1 and ay <= meta.height and meta.cells[ay][ax].walkable then
+						adjacent_walkable = { x = ax, y = ay }
+						break
+					end
+				end
+			end
+			if adjacent_walkable then
+				meta.doors[#meta.doors + 1] = {
+					a = { x = adjacent_walkable.x, y = adjacent_walkable.y },
+					b = { x = edge_cell.x, y = edge_cell.y },
+					style = "secret",
+					secret = true,
+					auto_close = 0,
+				}
+				meta.pickups[#meta.pickups + 1] = {
+					kind = "relic",
+					cell = { x = secret_cell.x, y = secret_cell.y },
+				}
+				meta.secret_walls[#meta.secret_walls + 1] = {
+					cell_a = adjacent_walkable,
+					cell_b = edge_cell,
+					reveal_method = rng:chance(0.5) and "burst" or "lore_clue",
+					required_fragment = rng:chance(0.5) and rng:int(1, 6) or nil,
+				}
+			end
+		end
+	end
+
 	return World.build(meta)
 end
 
@@ -354,6 +484,37 @@ local function build_boss_floor(config, rng)
 	spawn_enemy(meta, reserved, south, south.center, "leech")
 	spawn_enemy(meta, reserved, ante, ante.center, "stalker")
 	spawn_enemy(meta, reserved, boss, boss.center, "umbra")
+
+	-- boss arena pillars (4 destructible doors in quadrants)
+	meta.pillars = {}
+	local pillar_offsets = {
+		{ x = boss.x + 2, y = boss.y + 2 },
+		{ x = boss.x + boss.w - 2, y = boss.y + 2 },
+		{ x = boss.x + 2, y = boss.y + boss.h - 2 },
+		{ x = boss.x + boss.w - 2, y = boss.y + boss.h - 2 },
+	}
+	for _, pos in ipairs(pillar_offsets) do
+		if pos.x >= 1 and pos.x <= meta.width and pos.y >= 1 and pos.y <= meta.height then
+			local cell = meta.cells[pos.y][pos.x]
+			if cell.walkable then
+				cell.tags.pillar = true
+				cell.tags.destructible = true
+				meta.pillars[#meta.pillars + 1] = { cell = { x = pos.x, y = pos.y }, health = 40 }
+			end
+		end
+	end
+
+	-- fog zone tags on boss room edges
+	for _, cell in ipairs(boss.cells) do
+		if cell.x == boss.x + 1 or cell.x == boss.x + boss.w or cell.y == boss.y + 1 or cell.y == boss.y + boss.h then
+			local c = meta.cells[cell.y][cell.x]
+			if c.walkable then c.tags.fog_zone = true end
+		end
+	end
+
+	-- ration in chapel
+	local ration_cell = pick_room_cell(chapel, rng, reserved)
+	meta.pickups[#meta.pickups + 1] = { kind = "ration", cell = { x = ration_cell.x, y = ration_cell.y } }
 
 	return World.build(meta)
 end

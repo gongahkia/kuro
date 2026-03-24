@@ -1,23 +1,27 @@
 local util = require("src.core.util")
 local RNG = require("src.core.rng")
+local Events = require("src.core.events")
 local Difficulty = require("src.data.difficulty")
+local LoreData = require("src.data.lore")
 local Geometry = require("src.world.geometry")
 local World = require("src.world.world")
 local Generator = require("src.world.generator")
 local AI = require("src.game.ai")
+local FX = require("src.render.fx")
+local Codex = require("src.game.codex")
+local Encounters = require("src.game.encounters")
+local Audio = require("src.audio.audio")
+local AudioManifest = require("src.data.audio_manifest")
+local Relics = require("src.game.relics")
+local Stealth = require("src.game.stealth")
+local Hunger = require("src.game.hunger")
 
 local Renderer
 
 local Run = {}
 Run.__index = Run
 
-local lore_fragments = {
-	"The walls remember names the same way bones remember weight.",
-	"A torch can wound Umbra only when the light is offered.",
-	"The sentries were pilgrims who stared into the pit too long.",
-	"The black water reflects a ceiling that does not exist.",
-	"Every shrine marks a place where someone almost escaped.",
-}
+local lore_fragments = LoreData.fragments
 
 local function cell_key(cell)
 	return cell.x .. ":" .. cell.y
@@ -44,13 +48,15 @@ local function cell_center(cell)
 	return x, y
 end
 
-function Run.new(difficulty, seed, mutators)
+function Run.new(difficulty, seed, mutators, settings)
 	local base_profile = Difficulty.build(difficulty, 1, mutators)
 	local self = setmetatable({
 		difficulty = difficulty,
 		difficulty_label = base_profile.label,
 		seed = seed,
 		mutators = util.deepcopy(mutators or {}),
+		settings = settings or {},
+		events = Events.new(),
 		total_floors = 3,
 		floor = 1,
 		rng = RNG.new(seed + 4049),
@@ -111,6 +117,40 @@ function Run.new(difficulty, seed, mutators)
 		},
 	}, Run)
 
+	self.fx = FX.new(self.settings)
+	self.codex = Codex.new()
+	self.audio = Audio.new(self.settings)
+	self.audio:load_manifest(AudioManifest)
+	self.relics = Relics.new()
+	self.stealth = Stealth.new()
+	self.hunger = Hunger.new(100, 100)
+	self.is_moving = false
+	self.pending_riddle = nil
+	self.pending_sacrifice = nil
+	self.events:on("player_damaged", function()
+		self.fx:trigger_shake(0.4, 0.2)
+		self.audio:play("player_hit")
+	end)
+	self.events:on("burst_released", function()
+		self.fx:trigger_shake(0.6, 0.3)
+		self.audio:play("burst")
+	end)
+	self.events:on("enemy_killed", function(e)
+		self.fx:trigger_death_anim(0, 0, e.enemy.kind)
+		self.codex:record_enemy(e.enemy.kind)
+		self.audio:play("enemy_death", { x = e.enemy.x, y = e.enemy.y })
+	end)
+	self.events:on("player_moved", function(e) self.is_moving = e.moving end)
+	self.events:on("floor_loaded", function(e)
+		local ambient = e.floor == 3 and "ambient_boss" or ("ambient_floor" .. math.min(e.floor, 2))
+		self.audio:play_ambient(ambient)
+	end)
+	self.events:on("boss_phase_changed", function(e)
+		self.audio:play_music("boss_phase" .. math.min(e.phase, 3))
+	end)
+	self.events:on("pickup_collected", function(e)
+		if e.pickup.kind == "torch" then self.audio:play("pickup_torch") end
+	end)
 	self:load_floor(1)
 	return self
 end
@@ -173,6 +213,7 @@ function Run:load_floor(floor)
 		self:push_message(string.format("Floor %d: collect %d torches and breach the exit.", floor, config.torch_goal))
 	end
 	self:reveal_nearby()
+	self.events:emit("floor_loaded", { floor = floor })
 end
 
 function Run:alarm_enemies(duration)
@@ -191,6 +232,7 @@ function Run:damage_player(amount, reason)
 	if reason then
 		self:push_message(reason)
 	end
+	self.events:emit("player_damaged", { amount = amount, reason = reason, health = self.player.health })
 end
 
 function Run:current_objective_cell()
@@ -227,7 +269,7 @@ end
 
 function Run:reveal_nearby()
 	local origin_x, origin_y = World.world_to_cell(self.player.x, self.player.y)
-	local radius = math.max(4, math.floor(self.floor_config.view_distance * 0.42))
+	local radius = math.max(4, math.floor(self.floor_config.view_distance * 0.42)) + self.relics:get_value("reveal_radius_add", 0)
 	for dy = -radius, radius do
 		for dx = -radius, radius do
 			local x = origin_x + dx
@@ -337,18 +379,23 @@ function Run:update_player(dt)
 		turn = turn + 1
 	end
 
-	self.player.angle = util.wrap_angle(self.player.angle + turn * self.player.turn_speed * dt)
+	local jitter = self.hunger:get_control_jitter()
+	self.player.angle = util.wrap_angle(self.player.angle + turn * self.player.turn_speed * dt + (jitter > 0 and (math.random() - 0.5) * jitter * dt or 0))
 
+	local stealth_mult = self.stealth:get_speed_multiplier()
+	local dark_mult = (self.blackout_time > 0 and self.relics:get_value("dark_speed_mult", 1.0)) or 1.0
+	local move_speed = self.player.move_speed * stealth_mult * dark_mult
+	local strafe_speed = self.player.strafe_speed * stealth_mult * dark_mult
 	local forward_x = math.cos(self.player.angle)
 	local forward_y = math.sin(self.player.angle)
 	local right_x = -math.sin(self.player.angle)
 	local right_y = math.cos(self.player.angle)
-	local vx = forward_x * move * self.player.move_speed + right_x * strafe * self.player.strafe_speed
-	local vy = forward_y * move * self.player.move_speed + right_y * strafe * self.player.strafe_speed
+	local vx = forward_x * move * move_speed + right_x * strafe * strafe_speed
+	local vy = forward_y * move * move_speed + right_y * strafe * strafe_speed
 	local nx, ny, length = util.normalize(vx, vy)
 	if length > 0 then
-		vx = nx * math.max(self.player.move_speed, self.player.strafe_speed)
-		vy = ny * math.max(self.player.move_speed, self.player.strafe_speed)
+		vx = nx * math.max(move_speed, strafe_speed)
+		vy = ny * math.max(move_speed, strafe_speed)
 	end
 
 	self:attempt_axis(self.player.x + vx * dt, self.player.y)
@@ -357,9 +404,15 @@ function Run:update_player(dt)
 	if self.keys.lshift then
 		self.player.burst_charge = math.min(1.5, self.player.burst_charge + dt)
 	end
+	self.events:emit("player_moved", { x = self.player.x, y = self.player.y, moving = length > 0 })
 end
 
-function Run:spawn_enemy(kind, origin_cell)
+function Run:spawn_enemy(kind, origin_cell, modifier)
+	local EnemyData = require("src.data.enemies")
+	local archetype = EnemyData.archetypes[kind] or EnemyData.archetypes.stalker
+	local base_health = archetype.health or (kind == "stalker" and 35 or 45)
+	local mod = modifier and EnemyData.modifiers[modifier] or nil
+	if mod and mod.health_mult then base_health = math.floor(base_health * mod.health_mult) end
 	local origin_x = origin_cell and origin_cell.x or select(1, World.world_to_cell(self.player.x, self.player.y))
 	local origin_y = origin_cell and origin_cell.y or select(2, World.world_to_cell(self.player.x, self.player.y))
 	for radius = 1, 5 do
@@ -382,11 +435,12 @@ function Run:spawn_enemy(kind, origin_cell)
 						local spawn_x, spawn_y = cell_center({ x = x, y = y })
 						self.world.enemies[#self.world.enemies + 1] = {
 							kind = kind,
+							modifier = modifier,
 							cell = { x = x, y = y },
 							home = { x = x, y = y },
 							patrol = { x = origin_x, y = origin_y },
 							state = "search",
-							health = kind == "stalker" and 35 or 45,
+							health = base_health,
 							facing = 0,
 							x = spawn_x,
 							y = spawn_y,
@@ -404,6 +458,26 @@ function Run:spawn_enemy(kind, origin_cell)
 	return false
 end
 
+function Run:handle_enemy_death(enemy)
+	enemy.alive = false
+	self.stats.enemies_burned = self.stats.enemies_burned + 1
+	self.events:emit("enemy_killed", { enemy = enemy })
+	if enemy.modifier then
+		local EnemyData = require("src.data.enemies")
+		local mod = EnemyData.modifiers[enemy.modifier]
+		if mod and mod.on_death == "split" then
+			local prevent = self.relics and self.relics:has_effect("prevent_split")
+			if not prevent then
+				local cell = { x = select(1, World.world_to_cell(enemy.x, enemy.y)), y = select(2, World.world_to_cell(enemy.x, enemy.y)) }
+				for _ = 1, (mod.split_count or 2) do
+					self:spawn_enemy(mod.split_kind or "stalker", cell)
+				end
+				self:push_message("The " .. enemy.kind .. " splits apart.")
+			end
+		end
+	end
+end
+
 function Run:queue_hazard(cell, delay, duration, damage)
 	self.hazards[#self.hazards + 1] = {
 		cell = { x = cell.x, y = cell.y },
@@ -416,87 +490,11 @@ function Run:queue_hazard(cell, delay, duration, damage)
 end
 
 function Run:pick_encounter()
-	if self.director.threat_remaining <= 0 then
-		return self.rng:choice({ "torch-cache", "shrine", "revelation", "lore" })
-	end
-	local pool = { "ambush", "blackout", "trap", "elite" }
-	if self.floor >= 2 then
-		pool[#pool + 1] = "gauntlet"
-	end
-	if self.rng:chance(0.28) then
-		pool[#pool + 1] = "torch-cache"
-		pool[#pool + 1] = "revelation"
-	end
-	local picked = self.rng:choice(pool)
-	if picked ~= "torch-cache" and picked ~= "revelation" and picked ~= "shrine" and picked ~= "lore" then
-		self.director.threat_remaining = self.director.threat_remaining - 1
-	end
-	return picked
+	return Encounters.pick(self.rng, self.floor, self.director.threat_remaining > 0)
 end
 
 function Run:apply_encounter(node, kind)
-	if kind == "lore" or node.kind == "lore" then
-		self.director.lore_index = self.director.lore_index + 1
-		local fragment = lore_fragments[((self.director.lore_index - 1) % #lore_fragments) + 1]
-		self:push_message("Lore " .. self.director.lore_index .. ": " .. fragment)
-		if self.mutators.echoes then
-			self.player.flares = self.player.flares + 1
-		end
-		return
-	end
-
-	if kind == "torch-cache" then
-		self.player.inventory_torches = self.player.inventory_torches + 1
-		self.player.collected_torches = self.player.collected_torches + 1
-		self.stats.torches_collected = self.stats.torches_collected + 1
-		self:push_message("A hidden cache gifts you another torch.")
-		return
-	end
-	if kind == "shrine" then
-		self.player.health = math.min(self.player.max_health, self.player.health + 2)
-		self.player.light_charge = self.player.max_light_charge
-		self:push_message("A shrine quiets the panic in your chest.")
-		return
-	end
-	if kind == "revelation" then
-		self:reveal_path_to_objective()
-		return
-	end
-	if kind == "ambush" then
-		self:spawn_enemy("stalker", node.cell)
-		self:spawn_enemy("leech", node.cell)
-		self:push_message("[scratch] shapes peel out of the wall.")
-		return
-	end
-	if kind == "blackout" then
-		self.blackout_time = math.max(self.blackout_time, 5.0)
-		self:spawn_enemy("sentry", node.cell)
-		self:push_message("[hush] the room gutters into a deeper black.")
-		return
-	end
-	if kind == "trap" then
-		local origin_x, origin_y = node.cell.x, node.cell.y
-		for dy = -1, 1 do
-			for dx = -1, 1 do
-				if World.is_walkable(self.world, origin_x + dx, origin_y + dy) then
-					self:queue_hazard({ x = origin_x + dx, y = origin_y + dy }, 0.8, 1.5, 1)
-				end
-			end
-		end
-		self:push_message("[click] the floor memorizes your shape.")
-		return
-	end
-	if kind == "elite" then
-		self:spawn_enemy("rusher", node.cell)
-		self:push_message("[thud] something heavier is running at you.")
-		return
-	end
-	if kind == "gauntlet" then
-		self:spawn_enemy("stalker", node.cell)
-		self:spawn_enemy("rusher", node.cell)
-		self:spawn_enemy("sentry", node.cell)
-		self:push_message("[chorus] the corridor answers your steps.")
-	end
+	Encounters.apply(self, node, kind)
 end
 
 function Run:update_encounters()
@@ -506,6 +504,7 @@ function Run:update_encounters()
 			node.triggered = true
 			self.stats.encounters_triggered = self.stats.encounters_triggered + 1
 			local kind = node.kind == "lore" and "lore" or self:pick_encounter()
+			self.events:emit("encounter_triggered", { node = node, kind = kind })
 			self:apply_encounter(node, kind)
 		end
 	end
@@ -523,17 +522,45 @@ end
 
 function Run:collect_pickup(pickup)
 	pickup.active = false
+	self.events:emit("pickup_collected", { pickup = pickup })
 	if pickup.kind == "torch" then
 		self.player.collected_torches = self.player.collected_torches + 1
 		self.player.inventory_torches = self.player.inventory_torches + 1
-		self.player.max_light_charge = math.min(180, self.player.max_light_charge + 8)
+		local light_bonus = 8 * self.relics:get_value("torch_light_mult", 1.0)
+		self.player.max_light_charge = math.min(180, self.player.max_light_charge + light_bonus)
 		self.player.light_charge = math.min(self.player.max_light_charge, self.player.light_charge + 24)
 		self.stats.torches_collected = self.stats.torches_collected + 1
+		self.hunger:feed(12)
 		self:push_message(string.format("Torch claimed %d / %d.", self.player.collected_torches, self.player.torch_goal))
 	elseif pickup.kind == "shrine" then
 		self.player.health = math.min(self.player.max_health, self.player.health + 2)
 		self.player.light_charge = self.player.max_light_charge
+		self.hunger:restore_sanity(30)
 		self:push_message("The shrine steadies your breathing and flame.")
+	elseif pickup.kind == "ration" then
+		self.hunger:feed(35)
+		self:push_message("You consume the ration. The shaking eases.")
+	elseif pickup.kind == "note" then
+		self:push_message("[note] " .. (pickup.text or "The ink has faded."))
+		if self.codex then
+			local lore = LoreData.fragments
+			self.director.lore_index = self.director.lore_index + 1
+			local entry = lore[((self.director.lore_index - 1) % #lore) + 1]
+			self.codex:discover_fragment(entry.id)
+		end
+	elseif pickup.kind == "relic" then
+		local RelicData = require("src.data.relics")
+		local pool = {}
+		for _, r in ipairs(RelicData) do pool[#pool + 1] = r end
+		if #pool > 0 then
+			local relic = self.rng:choice(pool)
+			if self.relics:add(relic) then
+				self.relics:apply_stat_modifiers(self.player)
+				self:push_message("[relic] " .. relic.label .. ": " .. relic.desc)
+			else
+				self:push_message("Your hands are full. The relic crumbles.")
+			end
+		end
 	end
 end
 
@@ -562,10 +589,40 @@ function Run:interact()
 	local facing = Geometry.facing_cardinal(self.player.angle)
 	local target_cell = { x = cell_x + facing.dx, y = cell_y + facing.dy }
 
+	if self.pending_riddle then
+		if facing.name == self.pending_riddle.answer then
+			local reward = self.pending_riddle.reward
+			if reward == "torch" then
+				self.player.inventory_torches = self.player.inventory_torches + 1
+				self.player.collected_torches = self.player.collected_torches + 1
+				self:push_message("The riddle yields a torch.")
+			elseif reward == "light" then
+				self.player.light_charge = self.player.max_light_charge
+				self:push_message("Light floods back into your flame.")
+			elseif reward == "flare" then
+				self.player.flares = self.player.flares + 1
+				self:push_message("A flare materializes in your hand.")
+			end
+			self.pending_riddle = nil
+		else
+			self:push_message("The riddle rejects your answer.")
+		end
+		return
+	end
+
+	if self.pending_sacrifice then
+		self:damage_player(self.pending_sacrifice.cost, "You offer blood to the altar.")
+		self.player.light_charge = self.player.max_light_charge
+		self:push_message("The altar drinks and your flame roars.")
+		self.pending_sacrifice = nil
+		return
+	end
+
 	local door = World.get_door_between(self.world, current_cell.x, current_cell.y, target_cell.x, target_cell.y)
 	if door then
 		door.target = door.target < 0.5 and 1 or 0
 		self:push_message(door.target > 0 and "Door winding open." or "Door sealing shut.")
+		self.audio:play("door_open")
 		return
 	end
 
@@ -604,7 +661,7 @@ function Run:release_burst()
 		self.player.burst_charge = 0
 		return
 	end
-	local cost = 14 + charge * 22
+	local cost = (14 + charge * 22) * self.relics:get_value("burst_cost_mult", 1.0)
 	if self.player.light_charge < cost then
 		self:push_message("Your flame is too weak for a burst.")
 		self.player.burst_charge = 0
@@ -612,6 +669,8 @@ function Run:release_burst()
 	end
 	self.player.light_charge = self.player.light_charge - cost
 	self.player.burst_charge = 0
+	self.stealth:add_burst_noise()
+	self.events:emit("burst_released", { charge = charge })
 	self:push_message("[flare-burst] the chamber recoils from the light.")
 	for _, enemy in ipairs(self.world.enemies) do
 		if enemy.alive ~= false then
@@ -627,8 +686,25 @@ function Run:release_burst()
 					enemy.retreat_time = 1.6
 				end
 				if enemy.health <= 0 then
-					enemy.alive = false
-					self.stats.enemies_burned = self.stats.enemies_burned + 1
+					self:handle_enemy_death(enemy)
+				end
+			end
+		end
+	end
+	-- reveal secret doors within burst range
+	if self.world.secret_walls then
+		local player_cx, player_cy = World.world_to_cell(self.player.x, self.player.y)
+		for _, secret in ipairs(self.world.secret_walls) do
+			if secret.reveal_method == "burst" and not secret.revealed then
+				local dist = math.abs(secret.cell_b.x - player_cx) + math.abs(secret.cell_b.y - player_cy)
+				if dist <= math.ceil(2.6 + charge * 2.4) then
+					secret.revealed = true
+					local door = World.get_door_between(self.world, secret.cell_a.x, secret.cell_a.y, secret.cell_b.x, secret.cell_b.y)
+					if door then
+						door.secret = false
+						door.target = 1
+					end
+					self:push_message("[crack] a hidden passage shudders open.")
 				end
 			end
 		end
@@ -678,8 +754,7 @@ function Run:use_light(dt)
 					enemy.retreat_time = 1.1
 				end
 				if enemy.health <= 0 then
-					enemy.alive = false
-					self.stats.enemies_burned = self.stats.enemies_burned + 1
+					self:handle_enemy_death(enemy)
 					self:push_message(enemy.kind .. " burned away.")
 				end
 			end
@@ -689,6 +764,7 @@ function Run:use_light(dt)
 		if self.mutators.embers then
 			recovery = recovery + 3
 		end
+		recovery = recovery * self.relics:get_value("light_recovery_mult", 1.0)
 		self.player.light_charge = math.min(self.player.max_light_charge, self.player.light_charge + recovery * dt)
 	end
 end
@@ -738,26 +814,43 @@ function Run:update_boss(dt)
 		return
 	end
 
-	if self.stats.anchors_lit >= math.max(2, #self.world.anchors - 1) then
+	-- phase determination: 5 phases
+	local prev_phase = self.boss.phase
+	local umbra = nil
+	for _, e in ipairs(self.world.enemies) do
+		if e.kind == "umbra" and e.alive ~= false then umbra = e; break end
+	end
+	local anchors_lit = self.stats.anchors_lit
+	local total_anchors = #self.world.anchors
+	if anchors_lit >= total_anchors and umbra and umbra.health < 500 then
+		self.boss.phase = 5
+	elseif anchors_lit >= total_anchors then
+		self.boss.phase = 4
+	elseif anchors_lit >= math.max(2, total_anchors - 1) then
 		self.boss.phase = 3
-	elseif self.stats.anchors_lit >= 1 then
+	elseif anchors_lit >= 1 then
 		self.boss.phase = 2
 	else
 		self.boss.phase = 1
+	end
+	if self.boss.phase ~= prev_phase then
+		self.events:emit("boss_phase_changed", { phase = self.boss.phase })
 	end
 
 	self.boss.pulse_timer = self.boss.pulse_timer - dt
 	self.boss.summon_timer = self.boss.summon_timer - dt
 	self.boss.wall_timer = self.boss.wall_timer - dt
+	self.boss.beam_timer = (self.boss.beam_timer or 0) - dt
+	self.boss.beam_angle = (self.boss.beam_angle or 0) + dt * 0.8
+	self.boss.darkness_pulse_timer = (self.boss.darkness_pulse_timer or 3.0) - dt
+	self.boss.fog_timer = (self.boss.fog_timer or 5.0) - dt
 
 	local player_cell = { x = select(1, World.world_to_cell(self.player.x, self.player.y)), y = select(2, World.world_to_cell(self.player.x, self.player.y)) }
+
+	-- pulse attack (all phases)
 	if self.boss.pulse_timer <= 0 then
 		for _, offset in ipairs({
-			{ x = 0, y = 0 },
-			{ x = 1, y = 0 },
-			{ x = -1, y = 0 },
-			{ x = 0, y = 1 },
-			{ x = 0, y = -1 },
+			{ x = 0, y = 0 }, { x = 1, y = 0 }, { x = -1, y = 0 }, { x = 0, y = 1 }, { x = 0, y = -1 },
 		}) do
 			local cell = { x = player_cell.x + offset.x, y = player_cell.y + offset.y }
 			if World.is_walkable(self.world, cell.x, cell.y) then
@@ -765,32 +858,79 @@ function Run:update_boss(dt)
 			end
 		end
 		self.blackout_time = math.max(self.blackout_time, 1.0 + self.boss.phase * 0.4)
-		self.boss.pulse_timer = math.max(1.6, 4.3 - self.boss.phase)
+		self.boss.pulse_timer = math.max(1.2, 4.3 - self.boss.phase * 0.8)
 		self:push_message("[pulse] Umbra exhales through the room.")
 	end
 
+	-- rotating beam (phase 2+)
+	if self.boss.phase >= 2 and self.boss.beam_timer <= 0 and self.world.bossRoom then
+		local center = self.world.bossRoom.center
+		local cx, cy = center.x, center.y
+		local cos_a = math.cos(self.boss.beam_angle)
+		local sin_a = math.sin(self.boss.beam_angle)
+		for dist = 1, 8 do
+			local bx = cx + math.floor(cos_a * dist + 0.5)
+			local by = cy + math.floor(sin_a * dist + 0.5)
+			if World.is_walkable(self.world, bx, by) then
+				self:queue_hazard({ x = bx, y = by }, 0.6, 1.0, 1)
+			end
+		end
+		self.boss.beam_timer = math.max(0.8, 2.5 - self.boss.phase * 0.3)
+	end
+
+	-- wall hazards (phase 2+)
 	if self.boss.phase >= 2 and self.boss.wall_timer <= 0 then
 		for _, cell in ipairs(self.world.bossRoom.cells) do
 			if cell.x == player_cell.x or (self.boss.phase >= 3 and cell.y == player_cell.y) then
 				self:queue_hazard({ x = cell.x, y = cell.y }, 0.95, 1.5, 1)
 			end
 		end
-		self.boss.wall_timer = math.max(2.1, 5.0 - self.boss.phase)
+		self.boss.wall_timer = math.max(1.8, 5.0 - self.boss.phase * 0.8)
 		self:push_message("[crack] the chamber folds into harsher geometry.")
 	end
 
+	-- fog (phase 3+)
+	if self.boss.phase >= 3 and self.boss.fog_timer <= 0 then
+		self.boss.fog_active = true
+		self.boss.fog_duration = 4.0
+		self.boss.fog_timer = math.max(4.0, 8.0 - self.boss.phase)
+		self:push_message("[smother] light-dampening fog fills the arena.")
+	end
+	if self.boss.fog_active then
+		self.boss.fog_duration = self.boss.fog_duration - dt
+		self.blackout_time = math.max(self.blackout_time, 0.5)
+		if self.boss.fog_duration <= 0 then
+			self.boss.fog_active = false
+		end
+	end
+
+	-- darkness pulses (phase 4+)
+	if self.boss.phase >= 4 and self.boss.darkness_pulse_timer <= 0 then
+		self.blackout_time = math.max(self.blackout_time, 1.0)
+		self.boss.darkness_pulse_timer = 2.0
+	end
+
+	-- summon waves
 	if self.boss.summon_timer <= 0 then
 		if self.boss.phase == 1 then
 			self:spawn_enemy("stalker", self.world.bossRoom.center)
 		elseif self.boss.phase == 2 then
 			self:spawn_enemy("sentry", self.world.bossRoom.center)
 			self:spawn_enemy("leech", self.world.bossRoom.center)
-		else
+		elseif self.boss.phase == 3 then
+			self:spawn_enemy("rusher", self.world.bossRoom.center, "swift")
+			self:spawn_enemy("leech", self.world.bossRoom.center)
 			self:spawn_enemy("rusher", self.world.bossRoom.center)
 			self:spawn_enemy("leech", self.world.bossRoom.center)
+		elseif self.boss.phase >= 4 then
+			self:spawn_enemy("rusher", self.world.bossRoom.center, "armored")
+			self:spawn_enemy("leech", self.world.bossRoom.center, "cursed")
+			self:spawn_enemy("stalker", self.world.bossRoom.center, "swift")
 		end
-		self.boss.summon_timer = math.max(2.0, 5.0 - self.boss.phase)
+		self.boss.summon_timer = math.max(1.5, 5.0 - self.boss.phase * 0.8)
 	end
+
+	-- phase 5: Umbra becomes aggressive (handled in AI via context)
 end
 
 function Run:update_enemies(dt)
@@ -806,6 +946,7 @@ function Run:update_enemies(dt)
 end
 
 function Run:update(dt)
+	if self.paused then return nil end
 	self.damage_flash = math.max(0, self.damage_flash - dt)
 	self.blackout_time = math.max(0, self.blackout_time - dt)
 	self.alarm_time = math.max(0, self.alarm_time - dt)
@@ -814,6 +955,12 @@ function Run:update(dt)
 		self.guidance_cells = {}
 	end
 
+	self.stealth:update(dt, self.keys, self.keys.f, self.is_moving)
+	self.hunger:update(dt, {
+		blackout_time = self.blackout_time,
+		relics = self.relics,
+		damage_player = function(amount, reason) self:damage_player(amount, reason) end,
+	})
 	self:update_player(dt)
 	self:update_doors(dt)
 	self:update_flares(dt)
@@ -833,6 +980,9 @@ function Run:update(dt)
 	end
 
 	self:reveal_nearby()
+	self.audio:set_listener(self.player.x, self.player.y, self.player.angle)
+	self.audio:update(dt)
+	self.fx:update(dt)
 
 	if self.player.health <= 0 then
 		return "dead"
@@ -847,7 +997,7 @@ function Run:draw()
 	if not Renderer then
 		Renderer = require("src.render.renderer")
 	end
-	self.renderer = self.renderer or Renderer.new()
+	self.renderer = self.renderer or Renderer.new(self.settings)
 	self.objective_text = self.floor < self.total_floors
 		and (self.player.collected_torches < self.player.torch_goal
 			and string.format("Objective: recover %d more torches.", self.player.torch_goal - self.player.collected_torches)
@@ -859,10 +1009,23 @@ function Run:draw()
 		angle = self.player.angle,
 		height = self.player.height,
 	}
+	self.fx:apply_camera(self.camera, self.is_moving)
 	self.renderer:draw(self)
+	if self.paused then
+		self.renderer.hud:draw_pause(self, love.graphics)
+	end
 end
 
 function Run:keypressed(key)
+	if self.paused then
+		if key == "escape" then
+			self.paused = false
+			self.renderer.hud.paused = false
+		else
+			self.renderer.hud:pause_keypressed(key)
+		end
+		return
+	end
 	self.keys[key] = true
 	if key == "space" then
 		self.pending_interact = true
@@ -870,6 +1033,9 @@ function Run:keypressed(key)
 		self.pending_flare = true
 	elseif key == "tab" then
 		self.automap_enabled = not self.automap_enabled
+	elseif key == "escape" then
+		self.paused = true
+		self.renderer.hud.paused = true
 	end
 end
 

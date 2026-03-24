@@ -14,6 +14,15 @@ local suites = {
 	(require("test_generator")),
 	(require("test_ai")),
 	(require("test_run")),
+	(require("test_events")),
+	(require("test_settings")),
+	(require("test_fx")),
+	(require("test_codex")),
+	(require("test_encounters")),
+	(require("test_relics")),
+	(require("test_stealth")),
+	(require("test_hunger")),
+	(require("test_meta")),
 }
 
 local passed = 0

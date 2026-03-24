@@ -1,5 +1,6 @@
 local util = require("src.core.util")
 local World = require("src.world.world")
+local HUD = require("src.render.hud")
 
 local Renderer = {}
 Renderer.__index = Renderer
@@ -22,6 +23,11 @@ local palette = {
 	hazard = { 0.98, 0.34, 0.2, 1.0 },
 	telegraph = { 1.0, 0.18, 0.18, 1.0 },
 	flare = { 1.0, 0.96, 0.55, 1.0 },
+	ration = { 0.72, 0.58, 0.36, 1.0 },
+	relic = { 0.95, 0.82, 0.45, 1.0 },
+	note = { 0.85, 0.82, 0.72, 1.0 },
+	corpse = { 0.35, 0.32, 0.30, 1.0 },
+	blood_trail = { 0.55, 0.12, 0.10, 1.0 },
 }
 
 local function shade(color, distance, gloom)
@@ -37,11 +43,12 @@ local function restore_scissor(previous)
 	end
 end
 
-function Renderer.new()
+function Renderer.new(settings)
 	return setmetatable({
 		fov = math.rad(78),
 		near = 0.05,
 		max_depth = 32,
+		hud = HUD.new(settings),
 	}, Renderer)
 end
 
@@ -136,6 +143,7 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 	visited[sector_id] = true
 	local sector = world.sectors[sector_id]
 	if not sector then
+		visited[sector_id] = nil
 		return
 	end
 
@@ -160,10 +168,12 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 				end
 			end
 		else
-			local color = door and palette.door or palette.wall
+			local is_secret = door and door.secret and not World.is_door_open(world, door)
+			local color = (door and not is_secret) and palette.door or palette.wall
 			self:draw_wall(camera, sector, wall, color, clip_left, clip_right, gloom)
 		end
 	end
+	visited[sector_id] = nil -- per-branch: allow sector to render through other portals
 end
 
 function Renderer:renderWorld(camera, world, run_state)
@@ -220,134 +230,7 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 	end
 end
 
-function Renderer:renderAutomap(run_state)
-	if not run_state.automap_enabled then
-		return
-	end
-
-	local lg = love.graphics
-	local width, _ = lg.getDimensions()
-	local panel_size = 220
-	local panel_x = width - panel_size - 16
-	local panel_y = 16
-	local cell_size = math.floor(panel_size / math.max(run_state.world.width, run_state.world.height))
-
-	lg.setColor(0.04, 0.05, 0.06, 0.84)
-	lg.rectangle("fill", panel_x, panel_y, panel_size, panel_size, 10, 10)
-
-	for y = 1, run_state.world.height do
-		for x = 1, run_state.world.width do
-			local key = string.format("%d:%d", x, y)
-			if run_state.revealed[key] then
-				local cell = run_state.world.cells[y][x]
-				if cell.walkable then
-					local color = { 0.22, 0.28, 0.34, 0.9 }
-					if run_state.guidance_cells[key] then
-						color = { 0.95, 0.85, 0.42, 0.95 }
-					end
-					lg.setColor(color)
-					lg.rectangle("fill", panel_x + (x - 1) * cell_size + 8, panel_y + (y - 1) * cell_size + 8, cell_size - 1, cell_size - 1)
-				end
-			end
-		end
-	end
-
-	for _, anchor in ipairs(run_state.world.anchors) do
-		local key = string.format("%d:%d", anchor.cell.x, anchor.cell.y)
-		if run_state.revealed[key] then
-			lg.setColor(anchor.lit and palette.anchor_lit or palette.anchor)
-			lg.rectangle("fill", panel_x + (anchor.cell.x - 1) * cell_size + 10, panel_y + (anchor.cell.y - 1) * cell_size + 10, cell_size - 5, cell_size - 5)
-		end
-	end
-
-	if run_state.world.exit then
-		local key = string.format("%d:%d", run_state.world.exit.cell.x, run_state.world.exit.cell.y)
-		if run_state.revealed[key] then
-			lg.setColor(palette.exit)
-			lg.rectangle("fill", panel_x + (run_state.world.exit.cell.x - 1) * cell_size + 10, panel_y + (run_state.world.exit.cell.y - 1) * cell_size + 10, cell_size - 5, cell_size - 5)
-		end
-	end
-
-	for _, flare in ipairs(run_state.flares) do
-		local fx = panel_x + (flare.cell.x - 1) * cell_size + cell_size * 0.5 + 8
-		local fy = panel_y + (flare.cell.y - 1) * cell_size + cell_size * 0.5 + 8
-		lg.setColor(palette.flare)
-		lg.circle("fill", fx, fy, math.max(2, cell_size * 0.22))
-	end
-
-	local player_cell_x, player_cell_y = World.world_to_cell(run_state.player.x, run_state.player.y)
-	local px = panel_x + (player_cell_x - 1) * cell_size + cell_size * 0.5 + 8
-	local py = panel_y + (player_cell_y - 1) * cell_size + cell_size * 0.5 + 8
-	local facing_x = math.cos(run_state.player.angle)
-	local facing_y = math.sin(run_state.player.angle)
-	lg.setColor(0.95, 0.95, 0.98)
-	lg.circle("fill", px, py, math.max(2, cell_size * 0.24))
-	lg.line(px, py, px + facing_x * 8, py + facing_y * 8)
-end
-
-function Renderer:renderFX(run_state)
-	local lg = love.graphics
-	local width, height = lg.getDimensions()
-	if run_state.damage_flash > 0 then
-		lg.setColor(0.8, 0.1, 0.1, util.clamp(run_state.damage_flash, 0, 0.35))
-		lg.rectangle("fill", 0, 0, width, height)
-	end
-	if run_state.blackout_time > 0 then
-		lg.setColor(0.0, 0.0, 0.0, util.clamp(run_state.blackout_time * 0.28, 0.1, 0.45))
-		lg.rectangle("fill", 0, 0, width, height)
-	end
-	lg.setColor(1.0, 1.0, 1.0, 0.5)
-	lg.line(width * 0.5 - 6, height * 0.5, width * 0.5 + 6, height * 0.5)
-	lg.line(width * 0.5, height * 0.5 - 6, width * 0.5, height * 0.5 + 6)
-end
-
-function Renderer:renderHUD(run_state)
-	local lg = love.graphics
-	local width, height = lg.getDimensions()
-	local player = run_state.player
-
-	lg.setColor(0.92, 0.94, 0.97)
-	lg.print(string.format("KURO  Floor %d/%d  %s  Seed %d", run_state.floor, run_state.total_floors, run_state.difficulty_label, run_state.seed), 16, 12)
-	lg.print(string.format("HP %d/%d", player.health, player.max_health), 16, 34)
-	lg.print(string.format("Torches %d  Goal %d", player.inventory_torches, player.torch_goal), 16, 54)
-	lg.print(string.format("Charge %d%%  Flares %d  Phase %d", math.floor(player.light_charge), player.flares, run_state.boss.phase or 1), 16, 74)
-	lg.print(run_state.objective_text, 16, height - 86)
-
-	local bar_x = 16
-	local bar_y = 100
-	local bar_w = 200
-	lg.setColor(0.15, 0.15, 0.18)
-	lg.rectangle("fill", bar_x, bar_y, bar_w, 12)
-	lg.setColor(0.92, 0.25, 0.22)
-	lg.rectangle("fill", bar_x, bar_y, bar_w * (player.health / player.max_health), 12)
-	lg.setColor(0.15, 0.15, 0.18)
-	lg.rectangle("fill", bar_x, bar_y + 18, bar_w, 12)
-	lg.setColor(0.92, 0.74, 0.24)
-	lg.rectangle("fill", bar_x, bar_y + 18, bar_w * (player.light_charge / player.max_light_charge), 12)
-	lg.setColor(0.15, 0.15, 0.18)
-	lg.rectangle("fill", bar_x, bar_y + 36, bar_w, 10)
-	lg.setColor(0.72, 0.85, 1.0)
-	lg.rectangle("fill", bar_x, bar_y + 36, bar_w * (player.burst_charge / 1.5), 10)
-
-	local message_y = height - 62
-	for index = math.max(1, #run_state.messages - 2), #run_state.messages do
-		local message = run_state.messages[index]
-		lg.setColor(0.74, 0.78, 0.84)
-		lg.print(message, 16, message_y)
-		message_y = message_y + 18
-	end
-
-	local objective = run_state:current_objective_cell()
-	if objective then
-		local target_x, target_y = World.cell_to_world(objective)
-		local angle_to_target = math.atan(target_y - run_state.player.y, target_x - run_state.player.x)
-		local delta = ((angle_to_target - run_state.player.angle + math.pi) % (math.pi * 2)) - math.pi
-		lg.setColor(0.95, 0.85, 0.42)
-		lg.print(string.format("Guide %.0f deg", math.deg(delta)), width - 180, height - 34)
-	end
-
-	self:renderAutomap(run_state)
-end
+-- renderAutomap, renderFX, renderHUD extracted to src/render/hud.lua
 
 function Renderer:draw(run_state)
 	self:renderWorld(run_state.camera, run_state.world, run_state)
@@ -412,10 +295,20 @@ function Renderer:draw(run_state)
 			}
 		end
 	end
+	if run_state.world.decorations then
+		for _, deco in ipairs(run_state.world.decorations) do
+			sprite_entities[#sprite_entities + 1] = {
+				kind = deco.kind,
+				x = deco.x,
+				y = deco.y,
+				scale = deco.kind == "corpse" and 0.5 or 0.3,
+				active = true,
+			}
+		end
+	end
 
 	self:renderSprites(run_state.camera, run_state.world, sprite_entities, run_state)
-	self:renderFX(run_state)
-	self:renderHUD(run_state)
+	self.hud:draw(run_state, love.graphics)
 end
 
 return Renderer

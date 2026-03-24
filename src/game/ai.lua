@@ -1,40 +1,10 @@
 local util = require("src.core.util")
 local World = require("src.world.world")
+local EnemyData = require("src.data.enemies")
 
 local AI = {}
 
-local archetypes = {
-	stalker = {
-		speed = 1.35,
-		damage = 1,
-		range = 7.0,
-		attack_cooldown = 0.85,
-	},
-	rusher = {
-		speed = 1.55,
-		damage = 2,
-		range = 8.0,
-		attack_cooldown = 1.0,
-	},
-	leech = {
-		speed = 1.45,
-		damage = 1,
-		range = 6.0,
-		attack_cooldown = 1.0,
-	},
-	sentry = {
-		speed = 0.75,
-		damage = 1,
-		range = 7.5,
-		attack_cooldown = 1.2,
-	},
-	umbra = {
-		speed = 1.25,
-		damage = 2,
-		range = 10.0,
-		attack_cooldown = 1.1,
-	},
-}
+local archetypes = EnemyData.archetypes
 
 local function angle_delta(a, b)
 	return math.abs(((a - b + math.pi) % (math.pi * 2)) - math.pi)
@@ -67,9 +37,23 @@ local function move_toward(enemy, target_x, target_y, speed, dt)
 	enemy.facing = math.atan(ny, nx)
 end
 
+local function get_modifier(enemy)
+	if not enemy.modifier then return nil end
+	return EnemyData.modifiers[enemy.modifier]
+end
+
+local function effective_speed(spec, enemy)
+	local speed = spec.speed
+	local mod = get_modifier(enemy)
+	if mod and mod.speed_mult then speed = speed * mod.speed_mult end
+	return speed
+end
+
 local function move_along_cells(run, enemy, speed, dt, target_cell)
 	local current_x, current_y = World.world_to_cell(enemy.x, enemy.y)
-	local path = World.find_path(run.world, { x = current_x, y = current_y }, target_cell, false)
+	local mod = get_modifier(enemy)
+	local allow_doors = mod and mod.phase_through_doors or false
+	local path = World.find_path(run.world, { x = current_x, y = current_y }, target_cell, allow_doors)
 	if not path or #path < 2 then
 		return false
 	end
@@ -108,6 +92,7 @@ end
 
 function AI.update_enemy(run, enemy, dt)
 	local spec = archetypes[enemy.kind] or archetypes.stalker
+	local speed = effective_speed(spec, enemy)
 	local state, visible, player_distance = AI.describe(enemy, {
 		world = run.world,
 		player = run.player,
@@ -137,11 +122,16 @@ function AI.update_enemy(run, enemy, dt)
 
 	if player_distance and player_distance <= 0.48 and enemy.cooldown <= 0 then
 		enemy.cooldown = spec.attack_cooldown
-		run:damage_player(spec.damage, enemy.kind .. " struck from the dark.")
+		local mod = get_modifier(enemy)
+		local label = (mod and mod.label or "") .. " " .. enemy.kind
+		run:damage_player(spec.damage, label .. " struck from the dark.")
 		if enemy.kind == "leech" then
 			run.player.light_charge = math.max(0, run.player.light_charge - 26)
 			run.blackout_time = math.max(run.blackout_time, 2.0)
 			enemy.retreat_time = 1.4
+		end
+		if mod and mod.on_hit_player == "drain_light" then
+			run.player.light_charge = math.max(0, run.player.light_charge - (mod.drain_amount or 15))
 		end
 		return
 	end
@@ -149,29 +139,29 @@ function AI.update_enemy(run, enemy, dt)
 	if enemy.kind == "rusher" and visible then
 		local ex, ey = World.world_to_cell(enemy.x, enemy.y)
 		if ex == player_cell_x or ey == player_cell_y then
-			move_along_cells(run, enemy, spec.speed * 2.1, dt, { x = player_cell_x, y = player_cell_y })
+			move_along_cells(run, enemy, speed * 2.1, dt, { x = player_cell_x, y = player_cell_y })
 			return
 		end
 	end
 
 	if enemy.kind == "umbra" then
 		if player_distance > 3.2 then
-			move_along_cells(run, enemy, spec.speed, dt, { x = player_cell_x, y = player_cell_y })
+			move_along_cells(run, enemy, speed, dt, { x = player_cell_x, y = player_cell_y })
 		elseif player_distance < 1.25 and enemy.home then
-			move_along_cells(run, enemy, spec.speed * 0.9, dt, enemy.home)
+			move_along_cells(run, enemy, speed * 0.9, dt, enemy.home)
 		end
 		return
 	end
 
 	if state == "chase" then
-		move_along_cells(run, enemy, spec.speed, dt, { x = player_cell_x, y = player_cell_y })
+		move_along_cells(run, enemy, speed, dt, { x = player_cell_x, y = player_cell_y })
 	elseif state == "search" and enemy.last_seen then
-		move_along_cells(run, enemy, spec.speed * 0.82, dt, enemy.last_seen)
+		move_along_cells(run, enemy, speed * 0.82, dt, enemy.last_seen)
 	elseif state == "retreat" and enemy.home then
-		move_along_cells(run, enemy, spec.speed * 1.05, dt, enemy.home)
+		move_along_cells(run, enemy, speed * 1.05, dt, enemy.home)
 	elseif enemy.patrol then
 		local target_cell = enemy.patrol_forward ~= false and enemy.patrol or enemy.home
-		move_along_cells(run, enemy, spec.speed * 0.6, dt, target_cell)
+		move_along_cells(run, enemy, speed * 0.6, dt, target_cell)
 		local cell_x, cell_y = World.world_to_cell(enemy.x, enemy.y)
 		if target_cell and cell_x == target_cell.x and cell_y == target_cell.y then
 			enemy.patrol_forward = enemy.patrol_forward == false

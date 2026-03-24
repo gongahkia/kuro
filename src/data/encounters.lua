@@ -1,0 +1,15 @@
+return {
+	{ id = "ambush", kind = "combat", weight = 3, min_floor = 1 },
+	{ id = "blackout", kind = "combat", weight = 2, min_floor = 1 },
+	{ id = "trap", kind = "combat", weight = 2, min_floor = 1 },
+	{ id = "elite", kind = "combat", weight = 2, min_floor = 1 },
+	{ id = "gauntlet", kind = "combat", weight = 1, min_floor = 2 },
+	{ id = "torch-cache", kind = "reward", weight = 2, min_floor = 1 },
+	{ id = "shrine", kind = "reward", weight = 1, min_floor = 1 },
+	{ id = "revelation", kind = "reward", weight = 1, min_floor = 1 },
+	{ id = "lore", kind = "lore", weight = 1, min_floor = 1 },
+	{ id = "riddle", kind = "puzzle", weight = 1, min_floor = 1 },
+	{ id = "sacrifice", kind = "choice", weight = 1, min_floor = 2 },
+	{ id = "gamble_shrine", kind = "choice", weight = 1, min_floor = 1 },
+	{ id = "ghost_npc", kind = "dialogue", weight = 1, min_floor = 2 },
+}
