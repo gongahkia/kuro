@@ -1,19 +1,17 @@
-all: run
+LUA ?= lua
+LOVE ?= love
+
+.PHONY: run test lint
 
 run:
-	@go run ./src
+	@if command -v $(LOVE) >/dev/null 2>&1; then \
+		$(LOVE) .; \
+	else \
+		printf "Love 11.x is not installed. Run: love .\n"; \
+	fi
 
 test:
-	@go test ./...
+	@$(LUA) tests/run.lua
 
-soak:
-	@go test ./internal/game -run TestAutomatedSoakAcrossSeedsAndDifficulties
-
-tidy:
-	@go mod tidy
-
-config:
-	@printf "Install Go locally, then run 'make tidy' and 'make run'.\n"
-
-clean:
-	@go clean ./...
+lint:
+	@$(LUA) -e 'assert(loadfile("main.lua"))'
