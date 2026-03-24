@@ -33,6 +33,7 @@ make test
 - `Shift`: charge burst
 - `G`: throw flare
 - `Tab`: toggle automap
+- `Z`, `X`, `C`: toggle mutators on the title screen
 - `R`: restart after death or victory
 
 ## Structure

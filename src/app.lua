@@ -10,6 +10,12 @@ function App.new()
 		seed = os.time(),
 		run = nil,
 		last_result = nil,
+		last_summary = nil,
+		selected_mutators = {
+			embers = false,
+			echoes = false,
+			onslaught = false,
+		},
 	}, App)
 end
 
@@ -18,7 +24,7 @@ end
 
 function App:start_run(seed_override)
 	self.seed = seed_override or self.seed
-	self.run = Run.new(self.selected_difficulty, self.seed)
+	self.run = Run.new(self.selected_difficulty, self.seed, self.selected_mutators)
 	self.screen = "play"
 end
 
@@ -26,9 +32,11 @@ function App:update(dt)
 	if self.screen == "play" and self.run then
 		local outcome = self.run:update(dt)
 		if outcome == "dead" then
+			self.last_summary = self.run:summary()
 			self.screen = "dead"
 			self.last_result = "dead"
 		elseif outcome == "victory" then
+			self.last_summary = self.run:summary()
 			self.screen = "victory"
 			self.last_result = "victory"
 		end
@@ -54,11 +62,23 @@ function App:draw_title()
 	lg.setColor(0.87, 0.89, 0.95)
 	lg.printf("KURO", 0, height * 0.15, width, "center")
 	lg.setColor(0.45, 0.72, 1.0)
-	lg.printf("First-person light survival prototype", 0, height * 0.23, width, "center")
+	lg.printf("First-person light survival descent", 0, height * 0.23, width, "center")
 	lg.setColor(0.82, 0.84, 0.88)
 	lg.printf("Difficulty: " .. self.selected_difficulty, 0, height * 0.40, width, "center")
 	lg.printf("Seed: " .. tostring(self.seed), 0, height * 0.46, width, "center")
-	lg.printf("[1/2/3] Difficulty  [N] New seed  [Enter] Start", 0, height * 0.62, width, "center")
+	local mutators = {}
+	if self.selected_mutators.embers then
+		mutators[#mutators + 1] = "Embers"
+	end
+	if self.selected_mutators.echoes then
+		mutators[#mutators + 1] = "Echoes"
+	end
+	if self.selected_mutators.onslaught then
+		mutators[#mutators + 1] = "Onslaught"
+	end
+	lg.printf("Mutators: " .. (#mutators > 0 and table.concat(mutators, ", ") or "None"), 0, height * 0.52, width, "center")
+	lg.printf("[1/2/3] Difficulty  [N] New seed  [Z/X/C] Mutators  [Enter] Start", 0, height * 0.64, width, "center")
+	lg.printf("W/S move  A/D turn  Q/E strafe  F light  Shift burst  G flare  Space interact", 0, height * 0.70, width, "center")
 end
 
 function App:draw_result()
@@ -70,7 +90,12 @@ function App:draw_result()
 	lg.printf(label, 0, height * 0.28, width, "center")
 	lg.setColor(0.88, 0.88, 0.92)
 	lg.printf("Seed: " .. tostring(self.seed), 0, height * 0.40, width, "center")
-	lg.printf("[R] Retry seed  [N] New seed  [Enter] Title", 0, height * 0.60, width, "center")
+	if self.last_summary then
+		local stats = self.last_summary.stats
+		lg.printf(string.format("Floors cleared: %d   Damage taken: %d   Torches: %d", stats.floors_cleared, stats.damage_taken, stats.torches_collected), 0, height * 0.48, width, "center")
+		lg.printf(string.format("Encounters: %d   Anchors lit: %d   Flares used: %d", stats.encounters_triggered, stats.anchors_lit, stats.flares_used), 0, height * 0.54, width, "center")
+	end
+	lg.printf("[R] Retry seed  [N] New seed  [Enter] Title", 0, height * 0.64, width, "center")
 end
 
 function App:keypressed(key)
@@ -83,6 +108,12 @@ function App:keypressed(key)
 			self.selected_difficulty = "nightmare"
 		elseif key == "n" then
 			self.seed = os.time() + love.math.random(1, 99999)
+		elseif key == "z" then
+			self.selected_mutators.embers = not self.selected_mutators.embers
+		elseif key == "x" then
+			self.selected_mutators.echoes = not self.selected_mutators.echoes
+		elseif key == "c" then
+			self.selected_mutators.onslaught = not self.selected_mutators.onslaught
 		elseif key == "return" then
 			self:start_run(self.seed)
 		end
