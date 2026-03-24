@@ -10,6 +10,10 @@ package.path = table.concat({
 local suites = {
 	(require("test_rng")),
 	(require("test_util")),
+	(require("test_geometry")),
+	(require("test_generator")),
+	(require("test_ai")),
+	(require("test_run")),
 }
 
 local passed = 0
