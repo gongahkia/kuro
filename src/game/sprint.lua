@@ -283,6 +283,56 @@ local packs = {
 			), "obsidian_descent"),
 		},
 	},
+	velocity_circuit = {
+		id = "velocity_circuit",
+		label = "Velocity Circuit",
+		version = "1.0.0",
+		seeds = {
+			make_seed("straight_burn", "Straight Burn", 55123, medals(
+				{ bronze = 195, silver = 170, gold = 148, black_flame = 132 },
+				{ bronze = 218, silver = 192, gold = 168, black_flame = 150 },
+				{ bronze = 245, silver = 218, gold = 192, black_flame = 172 }
+			), route_manifest(
+				standard_route(1, 3, 3, 4, 2, 2, 2, 3),
+				standard_route(2, 4, 4, 5, 3, 3, 3, 4),
+				boss_route(1, 3, { 1, 2, 3 }, 0.74)
+			), "velocity_circuit"),
+			make_seed("chain_alley", "Chain Alley", 67891, medals(
+				{ bronze = 202, silver = 178, gold = 155, black_flame = 138 },
+				{ bronze = 226, silver = 198, gold = 174, black_flame = 156 },
+				{ bronze = 254, silver = 224, gold = 198, black_flame = 178 }
+			), route_manifest(
+				standard_route(2, 4, 4, 5, 2, 3, 3, 4),
+				standard_route(1, 5, 5, 6, 3, 4, 4, 5),
+				boss_route(2, 4, { 2, 1, 3 }, 0.71)
+			), "velocity_circuit"),
+		},
+	},
+	vertical_descent = {
+		id = "vertical_descent",
+		label = "Vertical Descent",
+		version = "1.0.0",
+		seeds = {
+			make_seed("drop_shaft", "Drop Shaft", 88201, medals(
+				{ bronze = 208, silver = 183, gold = 160, black_flame = 143 },
+				{ bronze = 232, silver = 204, gold = 180, black_flame = 161 },
+				{ bronze = 261, silver = 232, gold = 205, black_flame = 184 }
+			), route_manifest(
+				standard_route(1, 4, 3, 5, 2, 3, 3, 4),
+				standard_route(3, 5, 4, 6, 3, 4, 4, 5),
+				boss_route(1, 2, { 3, 2, 1 }, 0.73)
+			), "vertical_descent"),
+			make_seed("freefall_run", "Freefall Run", 99347, medals(
+				{ bronze = 212, silver = 187, gold = 163, black_flame = 146 },
+				{ bronze = 237, silver = 208, gold = 183, black_flame = 164 },
+				{ bronze = 266, silver = 236, gold = 209, black_flame = 188 }
+			), route_manifest(
+				standard_route(2, 3, 4, 4, 2, 2, 3, 3),
+				standard_route(1, 5, 3, 5, 4, 3, 3, 4),
+				boss_route(3, 1, { 1, 3, 2 }, 0.76)
+			), "vertical_descent"),
+		},
+	},
 }
 
 local function get_pack_or_default(pack_id)
