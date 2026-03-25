@@ -42,7 +42,10 @@ local suite = {
 		Replay.start_recording(12345, "stalker", {
 			mode = "sprint",
 			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
 			sprint_seed_id = "ember_arc",
+			pack_version = "1.0.0",
+			practice_target = "",
 			loadout = "scout",
 		})
 		Replay.record_key_state("w", true, 0.1)
@@ -56,10 +59,16 @@ local suite = {
 			sprint_seed_pack_id = "black_flame_circuit",
 			sprint_seed_id = "ember_arc",
 			sprint_ruleset = "official",
+			pack_version = "1.0.0",
+			practice_target = "",
 			medal = "gold",
+			timer_start_reason = "movement",
 			tech_usage = {
 				burn_dashes = 2,
 				flare_boosts = 1,
+			},
+			route_events = {
+				burn_lane_dashes = 1,
 			},
 		})
 		Replay.set_metadata({
@@ -75,9 +84,12 @@ local suite = {
 		assert(replay.context.mode == "sprint", "expected replay mode context")
 		assert(replay.context.sprint_seed_id == "ember_arc", "expected sprint seed context")
 		assert(replay.context.loadout == "scout", "expected replay loadout context")
+		assert(replay.metadata.pack_version == "1.0.0", "expected pack version metadata")
+		assert(replay.metadata.timer_start_reason == "movement", "expected timer start metadata")
 		assert(replay.metadata.pb == true, "expected pb metadata")
 		assert(replay.metadata.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected category metadata")
 		assert(replay.metadata.tech_usage.burn_dashes == 2, "expected tech usage metadata")
+		assert(replay.metadata.route_events.burn_lane_dashes == 1, "expected route event metadata")
 		assert(#replay.splits == 1, "expected split table persistence")
 		assert(#replay.ghost_frames == 2, "expected stored ghost frames")
 	end,
