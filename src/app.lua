@@ -68,6 +68,28 @@ local function format_delta(delta)
 	return string.format("%+.2fs", delta)
 end
 
+local function sprint_warning_parts(pb_pack_version, current_pack_version, mixed_split_versions)
+	local parts = {}
+	if pb_pack_version and pb_pack_version ~= "" and current_pack_version and current_pack_version ~= "" and pb_pack_version ~= current_pack_version then
+		parts[#parts + 1] = string.format("Legacy PB %s", pb_pack_version)
+	end
+	if mixed_split_versions then
+		parts[#parts + 1] = "Mixed split versions"
+	end
+	return parts
+end
+
+local function apply_sprint_record_summary(summary, sprint_result)
+	local merged = util.deepcopy(summary or {})
+	local record = sprint_result and sprint_result.record or nil
+	merged.best_possible_time = (sprint_result and sprint_result.best_possible_time) or merged.best_possible_time
+	merged.projected_saves = util.deepcopy((sprint_result and sprint_result.projected_saves) or merged.projected_saves or {})
+	merged.mixed_split_versions = (sprint_result and sprint_result.mixed_split_versions == true) or merged.mixed_split_versions == true
+	merged.best_time_pack_version = record and record.best_time_pack_version or merged.best_time_pack_version
+	merged.best_time_build_id = record and record.best_time_build_id or merged.best_time_build_id
+	return merged
+end
+
 function App.new()
 	return setmetatable({
 		screen = "title",
@@ -265,21 +287,26 @@ function App:get_sprint_record(config)
 	if not config or config.mode ~= "sprint" or config.sprint_ruleset ~= "official" or not config.category_key then
 		return nil
 	end
-	return self.settings.sprint_records[config.category_key]
+	return Sprint.normalize_record(self.settings.sprint_records[config.category_key])
 end
 
 function App:build_ghost_compare(config)
 	local record = self:get_sprint_record(config)
 	if not record or not record.pb_replay then
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	end
 	local replay = Replay.inspect(record.pb_replay)
 	if not replay or replay.metadata.category_key ~= config.category_key then
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	end
+	local pb_pack_version = replay.metadata.pack_version or record.best_time_pack_version or record.pack_version or ""
 	return {
 		frames = replay.ghost_frames or {},
-	}, record.best_time, record.best_splits or {}, record.best_possible_time
+	}, record.best_time, record.best_splits or {}, record.best_possible_time, {
+		pb_pack_version = pb_pack_version,
+		pack_version_mismatch = pb_pack_version ~= "" and config.pack_version ~= "" and pb_pack_version ~= config.pack_version,
+		mixed_split_versions = record.mixed_split_versions == true,
+	}
 end
 
 function App:start_run(config)
@@ -289,9 +316,9 @@ function App:start_run(config)
 	self.last_run_config = util.deepcopy(config)
 	self.last_run_config.replay_mode = nil
 
-	local ghost_compare, pb_time, pb_splits, best_possible_time = nil, nil, nil, nil
+	local ghost_compare, pb_time, pb_splits, best_possible_time, comparison_info = nil, nil, nil, nil, nil
 	if not config.replay_mode then
-		ghost_compare, pb_time, pb_splits, best_possible_time = self:build_ghost_compare(config)
+		ghost_compare, pb_time, pb_splits, best_possible_time, comparison_info = self:build_ghost_compare(config)
 	end
 
 	self.run = Run.new(config.difficulty, config.seed, config.mutators, self.settings, {
@@ -310,6 +337,9 @@ function App:start_run(config)
 		official_record_eligible = config.official_record_eligible == true and config.replay_mode ~= true,
 		ghost_compare = ghost_compare,
 		pb_total_time = pb_time,
+		pb_pack_version = comparison_info and comparison_info.pb_pack_version or "",
+		pack_version_mismatch = comparison_info and comparison_info.pack_version_mismatch == true or false,
+		mixed_split_versions = comparison_info and comparison_info.mixed_split_versions == true or false,
 		pb_splits = pb_splits,
 		best_possible_time = best_possible_time,
 		medal_targets = config.mode == "sprint" and config.sprint_ruleset == "official"
@@ -426,7 +456,7 @@ function App:save_replay_snapshot(reason, filename, extra_metadata)
 	if not self.run or self.run.replay_mode or not Replay.has_data() then
 		return false
 	end
-	local summary = self.run:summary()
+	local summary = util.deepcopy((extra_metadata and extra_metadata.summary) or self.run:summary())
 	Replay.set_summary(summary)
 	Replay.set_metadata({
 		pb = extra_metadata and extra_metadata.pb == true or false,
@@ -441,6 +471,9 @@ function App:save_replay_snapshot(reason, filename, extra_metadata)
 		practice_target = summary.practice_target or "",
 		timer_start_reason = summary.timer_start_reason or "",
 		best_possible_time = summary.best_possible_time or 0,
+		pb_pack_version = summary.pb_pack_version or "",
+		pack_version_mismatch = summary.pack_version_mismatch == true,
+		mixed_split_versions = summary.mixed_split_versions == true,
 		replay_file = filename or "",
 		tech_usage = summary.tech_usage or {},
 		route_events = summary.route_events or {},
@@ -460,6 +493,7 @@ end
 
 function App:record_result(outcome)
 	self.last_summary = self.run:summary()
+	self.last_summary.build_id = Build.get_id()
 	self.last_summary.outcome = outcome
 	self.last_result = outcome
 	self.screen = outcome
@@ -483,23 +517,25 @@ function App:record_result(outcome)
 				self.settings.time_attack_records[key] = self.last_summary.duration
 			end
 		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "official" then
-			local finish_replay = Replay.result_filename(self.last_summary.category_key, os.time())
-			if not self:save_replay_snapshot("official_finish", finish_replay, { pb = false, quiet = true }) then
-				finish_replay = nil
-			end
 			local records, sprint_result = Sprint.update_record(self.settings.sprint_records, self.last_summary)
 			self.settings.sprint_records = records
+			local official_summary = apply_sprint_record_summary(self.last_summary, sprint_result)
+			local finish_replay = Replay.result_filename(official_summary.category_key, love and love.timer and love.timer.getTime and love.timer.getTime() or os.clock())
+			if not self:save_replay_snapshot("official_finish", finish_replay, { pb = false, quiet = true, summary = official_summary }) then
+				finish_replay = nil
+			end
 			local pb_name = nil
 			if sprint_result.new_pb and self.settings.runner_auto_save_pb_replay ~= false then
 				pb_name = Replay.pb_filename(sprint_result.category_key)
-				if self:save_replay_snapshot("pb_finish", pb_name, { pb = true, quiet = true }) then
-					local with_replay, replay_result = Sprint.update_record(self.settings.sprint_records, self.last_summary, pb_name)
-					self.settings.sprint_records = with_replay
-					sprint_result = replay_result
+				if self:save_replay_snapshot("pb_finish", pb_name, { pb = true, quiet = true, summary = official_summary }) then
+					local linked_records, linked_record = Sprint.link_pb_replay(self.settings.sprint_records, sprint_result.category_key, pb_name)
+					self.settings.sprint_records = linked_records
+					sprint_result.record = linked_record
 				end
 			end
+			self.last_summary = official_summary
 			self.last_sprint_record = sprint_result
-			self:export_sprint_summary(self.last_summary, sprint_result, finish_replay)
+			self:export_sprint_summary(official_summary, sprint_result, finish_replay)
 		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "practice" then
 			local records = self.settings.sprint_practice_records or {}
 			local updated_records = Sprint.update_practice_record(records, self.last_summary)
@@ -644,7 +680,7 @@ function App:export_sprint_summary(summary, sprint_result, replay_filename)
 		return false
 	end
 	local build_id = Build.get_id()
-	local export_base = Replay.get_export_dir() .. "/" .. Replay.export_basename(summary.category_key, os.time())
+	local export_base = Replay.get_export_dir() .. "/" .. Replay.export_basename(summary.category_key, love and love.timer and love.timer.getTime and love.timer.getTime() or os.clock())
 	local payload = {
 		build_id = build_id,
 		category_key = summary.category_key or "",
@@ -657,6 +693,9 @@ function App:export_sprint_summary(summary, sprint_result, replay_filename)
 		duration = summary.duration or 0,
 		medal = summary.medal or "",
 		best_possible_time = (sprint_result and sprint_result.best_possible_time) or summary.best_possible_time or 0,
+		pb_pack_version = summary.pb_pack_version or "",
+		pack_version_mismatch = summary.pack_version_mismatch == true,
+		mixed_split_versions = summary.mixed_split_versions == true,
 		timer_start_reason = summary.timer_start_reason or "",
 		replay_file = replay_filename or "",
 		gold_splits = util.deepcopy((sprint_result and sprint_result.gold_splits) or summary.gold_splits or {}),
@@ -675,6 +714,9 @@ function App:export_sprint_summary(summary, sprint_result, replay_filename)
 		"duration=" .. tostring(payload.duration),
 		"medal=" .. tostring(payload.medal),
 		"best_possible_time=" .. tostring(payload.best_possible_time),
+		"pb_pack_version=" .. tostring(payload.pb_pack_version),
+		"pack_version_mismatch=" .. tostring(payload.pack_version_mismatch),
+		"mixed_split_versions=" .. tostring(payload.mixed_split_versions),
 		"timer_start_reason=" .. tostring(payload.timer_start_reason),
 		"replay_file=" .. tostring(payload.replay_file),
 	}
@@ -836,6 +878,10 @@ function App:draw_title()
 		local best_medal = record and (record.best_medal or record.medal) or "none"
 		local best_possible = record and record.best_possible_time and format_time(record.best_possible_time) or "--"
 		draw_centered(lg, string.format("%s  PB %s  Medal %s  Best Possible %s", seed.label, best_time, best_medal, best_possible), height * 0.72, width, { 0.94, 0.88, 0.42, 1.0 })
+		local warnings = table.concat(sprint_warning_parts(record and record.best_time_pack_version, config.pack_version, record and record.mixed_split_versions), "  ")
+		if warnings ~= "" then
+			draw_centered(lg, warnings, height * 0.75, width, { 0.72, 0.9, 1.0, 1.0 })
+		end
 	else
 		draw_centered(lg, config.mode == "sprint" and string.format("Practice Seed %d  Target %s", config.seed, config.practice_target_label or self:get_practice_target_label()) or ("Seed: " .. tostring(config.seed)), height * 0.72, width, { 0.82, 0.84, 0.88, 1.0 })
 	end
@@ -948,12 +994,18 @@ function App:draw_result()
 				projected_saves = self.last_sprint_record and self.last_sprint_record.projected_saves or projected_saves
 				split_rows = Sprint.get_split_rows(record and record.best_splits or {}, self.last_summary.splits or {})
 				draw_centered(lg, string.format("Medal %s  %s  %s  Best Possible %s", medal, pb_text, split_text, best_possible and format_time(best_possible) or "--"), height * 0.44, width, { 0.94, 0.88, 0.42, 1.0 })
+				local warnings = table.concat(sprint_warning_parts(self.last_summary.pb_pack_version, self.last_summary.pack_version, self.last_summary.mixed_split_versions), "  ")
+				if warnings ~= "" then
+					draw_centered(lg, warnings, height * 0.47, width, { 0.72, 0.9, 1.0, 1.0 })
+				end
 			else
 				local best = self.last_summary.practice_target and self.settings.sprint_practice_records[self.last_summary.practice_target]
 				split_rows = Sprint.get_split_rows({}, self.last_summary.splits or {})
 				draw_centered(lg, string.format("Sprint practice: %s  Best %s", self.last_summary.practice_target_label or self.last_summary.practice_target or "target", best and format_time(best.best_time) or "none"), height * 0.44, width, { 0.7, 0.8, 1.0, 1.0 })
 			end
-			local y = height * 0.50
+			local y = height * ((self.last_summary.sprint_ruleset == "official"
+				and #sprint_warning_parts(self.last_summary.pb_pack_version, self.last_summary.pack_version, self.last_summary.mixed_split_versions) > 0)
+				and 0.53 or 0.50)
 			for _, split in ipairs(split_rows) do
 				local delta = split.delta and ("  " .. format_delta(split.delta)) or ""
 				local segment = split.best_segment_time and string.format("  Seg %s / %s", format_time(split.segment_time or 0), format_time(split.best_segment_time or 0))
