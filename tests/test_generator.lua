@@ -57,23 +57,26 @@ return {
 			sprint_seed_pack_id = "black_flame_circuit",
 			sprint_seed_id = "ember_arc",
 		})
-		local found_shortcut = false
+		local found_route_door = false
 		for _, door in pairs(world.doors) do
-			if door.style == "shortcut" then
-				found_shortcut = true
+			if door.style == "dark_lane" or door.style == "flare_line" or door.style == "burn_lane" then
+				found_route_door = true
 				break
 			end
 		end
-		assert(found_shortcut, "expected official sprint shortcut door")
+		assert(found_route_door, "expected authored sprint route door")
 		local found_marker = false
-		local found_route_node = world.routeNodes and world.routeNodes.burn_lane_1 ~= nil
+		local burn_route = world.routeNodes and world.routeNodes.burn_lane_1 or nil
+		local flare_route = world.routeNodes and world.routeNodes.flare_line_1 or nil
 		for _, decoration in ipairs(world.decorations or {}) do
 			if decoration.kind == "burn_marker" or decoration.kind == "minimum_marker" or decoration.kind == "dark_marker" or decoration.kind == "flare_marker" then
 				found_marker = true
 			end
 		end
 		assert(found_marker, "expected sprint shortcut markers")
-		assert(found_route_node, "expected authored route node")
+		assert(burn_route ~= nil, "expected authored burn route node")
+		assert(flare_route ~= nil and #(flare_route.checkpoints or {}) >= 2, "expected authored flare checkpoints")
+		assert(#(burn_route.gate_cells or {}) >= 2, "expected authored burn gates")
 		local found_optional_torch = false
 		for _, pickup in ipairs(world.pickups) do
 			if pickup.kind == "torch" and pickup.optional == true then
