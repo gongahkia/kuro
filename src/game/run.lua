@@ -18,6 +18,7 @@ local Sanity = require("src.game.sanity")
 local Consumables = require("src.data.consumables")
 local Challenges = require("src.game.challenges")
 local Sprint = require("src.game.sprint")
+local Momentum = require("src.game.momentum")
 
 local Renderer
 
@@ -137,6 +138,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			route = nil,
 		},
 		completed = false,
+		momentum = Momentum.new(),
 		player = {
 			x = 0,
 			y = 0,
@@ -1106,17 +1108,15 @@ function Run:update_player(dt)
 	local dark_mult = (self.blackout_time > 0 and self.relics:get_value("dark_speed_mult", 1.0)) or 1.0
 	local move_speed = self.player.move_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
 	local strafe_speed = self.player.strafe_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
-	local forward_x = math.cos(self.player.angle)
-	local forward_y = math.sin(self.player.angle)
-	local right_x = -math.sin(self.player.angle)
-	local right_y = math.cos(self.player.angle)
-	local vx = forward_x * move * move_speed + right_x * strafe * strafe_speed
-	local vy = forward_y * move * move_speed + right_y * strafe * strafe_speed
-	local nx, ny, length = util.normalize(vx, vy)
-	if length > 0 then
-		vx = nx * math.max(move_speed, strafe_speed)
-		vy = ny * math.max(move_speed, strafe_speed)
-	end
+	local momentum_input = {
+		move = move,
+		strafe = strafe,
+		turn = turn,
+		crouch = self.keys.lctrl or false,
+		move_speed = move_speed,
+		strafe_speed = strafe_speed,
+	}
+	local vx, vy = self.momentum:update(dt, momentum_input, self.player, nil)
 
 	self:attempt_axis(self.player.x + vx * dt, self.player.y)
 	self:attempt_axis(self.player.x, self.player.y + vy * dt)
@@ -1132,8 +1132,9 @@ function Run:update_player(dt)
 	if self.keys.lshift then
 		self.player.burst_charge = math.min(1.5, self.player.burst_charge + dt)
 	end
+	self.is_moving = self.momentum:get_speed() > 0.1 or self.player.dash_time > 0
 	self:update_route_progress()
-	self.events:emit("player_moved", { x = self.player.x, y = self.player.y, moving = length > 0 or self.player.dash_time > 0 })
+	self.events:emit("player_moved", { x = self.player.x, y = self.player.y, moving = self.is_moving })
 end
 
 function Run:update_practice_goal()

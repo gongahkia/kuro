@@ -27,6 +27,7 @@ local suites = {
 	(require("test_sprint")),
 	(require("test_app")),
 	(require("test_replay")),
+	(require("test_momentum")),
 }
 
 local passed = 0

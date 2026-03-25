@@ -137,8 +137,9 @@ function Momentum:update(dt, input, player, world_query)
 		accel_x, accel_y = 0, 0
 	elseif self.airborne then
 		-- air: reduced forward control + air strafe from turn
-		accel_x = (forward_x * move * move_speed + right_x * strafe * strafe_speed) * 0.3
-		accel_y = (forward_y * move * move_speed + right_y * strafe * strafe_speed) * 0.3
+		local air_accel = AIR_FRICTION + 0.3 -- scale so air input has meaningful effect
+		accel_x = (forward_x * move * move_speed + right_x * strafe * strafe_speed) * air_accel
+		accel_y = (forward_y * move * move_speed + right_y * strafe * strafe_speed) * air_accel
 		-- air strafe from A/D turn adds lateral velocity
 		local turn = input.turn or 0
 		if turn ~= 0 then
@@ -146,9 +147,9 @@ function Momentum:update(dt, input, player, world_query)
 			accel_y = accel_y + right_y * turn * AIR_STRAFE_ACCEL
 		end
 	else
-		-- ground: direct input → velocity (high friction converges fast)
-		accel_x = forward_x * move * move_speed + right_x * strafe * strafe_speed
-		accel_y = forward_y * move * move_speed + right_y * strafe * strafe_speed
+		-- ground: scale by friction so steady-state converges to input speed
+		accel_x = (forward_x * move * move_speed + right_x * strafe * strafe_speed) * friction
+		accel_y = (forward_y * move * move_speed + right_y * strafe * strafe_speed) * friction
 	end
 	-- propulsion (backward fire)
 	if self.propulsion_force > 0 then
