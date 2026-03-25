@@ -108,6 +108,13 @@ return {
 		local key = "sprint:stalker:black_flame_circuit:ember_arc"
 		assert(app.settings.sprint_records[key].best_time == 170, "expected stored sprint pb")
 		assert(files["replays/pb_sprint_stalker_black_flame_circuit_ember_arc.txt"], "expected autosaved pb replay")
+		local found_export = false
+		for path in pairs(files) do
+			if path:match("^exports/") then
+				found_export = true
+			end
+		end
+		assert(found_export, "expected sprint export file")
 	end,
 
 	["app practice sprint wins leave official records untouched"] = function()
@@ -115,15 +122,17 @@ return {
 		app:load({})
 		app.selected_mode = "sprint"
 		app.settings.selected_sprint_ruleset = "practice"
-		app.settings.selected_sprint_seed_id = "random"
+		app.settings.selected_sprint_seed_id = "ember_arc"
+		app.settings.selected_sprint_practice_target = "drill:black_flame_circuit:ember_arc:flare_line"
 		app:start_run()
 		Replay.record_key_state("w", true, 0.1)
 		app.run.clock = 150
 		app.run.splits = {
-			{ id = "floor_3_start", label = "Floor 3 Start", floor = 3, time = 0 },
-			{ id = "run_finish", label = "Run Finish", floor = 3, time = 150 },
+			{ id = "floor_2_start", label = "Floor 2 Start", floor = 2, time = 0 },
+			{ id = "run_finish", label = "Run Finish", floor = 2, time = 150 },
 		}
 		app:record_result("victory")
 		assert(next(app.settings.sprint_records) == nil, "practice should not create official sprint records")
+		assert(app.settings.sprint_practice_records["drill:black_flame_circuit:ember_arc:flare_line"].best_time == 150, "expected local drill best")
 	end,
 }
