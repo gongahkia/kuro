@@ -1,6 +1,8 @@
 local util = require("src.core.util")
 local World = require("src.world.world")
 local HUD = require("src.render.hud")
+local Textures = require("src.render.textures")
+local Sprites = require("src.render.sprites")
 
 local Renderer = {}
 Renderer.__index = Renderer
@@ -63,12 +65,18 @@ local function restore_scissor(previous)
 end
 
 function Renderer.new(settings)
-	return setmetatable({
+	local r = setmetatable({
 		fov = math.rad(78),
 		near = 0.05,
 		max_depth = 32,
 		hud = HUD.new(settings),
+		textures = Textures.load(),
+		sprites = Sprites.load(),
+		floor_num = 1,
+		time = 0,
 	}, Renderer)
+	r.wall_mesh = love.graphics.newMesh(4, "fan", "stream")
+	return r
 end
 
 function Renderer:transform(camera, x, y)
@@ -85,20 +93,24 @@ end
 
 function Renderer:clip_segment(a, b)
 	if a.z < self.near and b.z < self.near then
-		return nil, nil
+		return nil, nil, 0, 1
 	end
 	local clipped_a = { x = a.x, z = a.z }
 	local clipped_b = { x = b.x, z = b.z }
+	local t_start = 0
+	local t_end = 1
 	if clipped_a.z < self.near then
-		local t = (self.near - clipped_a.z) / (clipped_b.z - clipped_a.z)
-		clipped_a.x = clipped_a.x + (clipped_b.x - clipped_a.x) * t
+		local t = (self.near - a.z) / (b.z - a.z)
+		clipped_a.x = a.x + (b.x - a.x) * t
 		clipped_a.z = self.near
+		t_start = t
 	elseif clipped_b.z < self.near then
-		local t = (self.near - clipped_b.z) / (clipped_a.z - clipped_b.z)
-		clipped_b.x = clipped_b.x + (clipped_a.x - clipped_b.x) * t
+		local t = (self.near - b.z) / (a.z - b.z)
+		clipped_b.x = b.x + (a.x - b.x) * t
 		clipped_b.z = self.near
+		t_end = 1 - t
 	end
-	return clipped_a, clipped_b
+	return clipped_a, clipped_b, t_start, t_end
 end
 
 function Renderer:project_point(width, x, z)
@@ -106,11 +118,11 @@ function Renderer:project_point(width, x, z)
 	return width * 0.5 + (x / z) * projection, projection
 end
 
-function Renderer:draw_wall(camera, sector, wall, color, clip_left, clip_right, gloom)
+function Renderer:draw_wall(camera, sector, wall, color, texture, clip_left, clip_right, gloom)
 	local width, height = love.graphics.getDimensions()
 	local ax, az = self:transform(camera, wall.a.x, wall.a.y)
 	local bx, bz = self:transform(camera, wall.b.x, wall.b.y)
-	local start, ending = self:clip_segment({ x = ax, z = az }, { x = bx, z = bz })
+	local start, ending, t_start, t_end = self:clip_segment({ x = ax, z = az }, { x = bx, z = bz })
 	if not start or not ending then
 		return nil
 	end
@@ -123,6 +135,7 @@ function Renderer:draw_wall(camera, sector, wall, color, clip_left, clip_right, 
 	if screen_x2 < screen_x1 then
 		screen_x1, screen_x2 = screen_x2, screen_x1
 		start, ending = ending, start
+		t_start, t_end = t_end, t_start
 	end
 
 	local visible_left = math.max(screen_x1, clip_left)
@@ -137,14 +150,32 @@ function Renderer:draw_wall(camera, sector, wall, color, clip_left, clip_right, 
 	local top2 = horizon - ((sector.ceiling - camera.height) / ending.z) * projection
 	local bottom2 = horizon - ((sector.floor - camera.height) / ending.z) * projection
 
-	local r, g, b, a = shade(color, (start.z + ending.z) * 0.5, gloom)
-	love.graphics.setColor(r, g, b, a)
-	love.graphics.polygon("fill",
-		screen_x1, top1,
-		screen_x2, top2,
-		screen_x2, bottom2,
-		screen_x1, bottom1
-	)
+	local dist = (start.z + ending.z) * 0.5
+	if texture then
+		local wall_len = util.distance(wall.a.x, wall.a.y, wall.b.x, wall.b.y)
+		local u1 = t_start * wall_len
+		local u2 = t_end * wall_len
+		local fade = util.clamp(1.0 - dist * 0.08 - gloom * 0.22, 0.14, 1.0)
+		self.wall_mesh:setVertices({
+			{ screen_x1, top1, u1, 0, fade, fade, fade, 1.0 },
+			{ screen_x2, top2, u2, 0, fade, fade, fade, 1.0 },
+			{ screen_x2, bottom2, u2, 1, fade, fade, fade, 1.0 },
+			{ screen_x1, bottom1, u1, 1, fade, fade, fade, 1.0 },
+		})
+		self.wall_mesh:setTexture(texture)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.draw(self.wall_mesh)
+	else
+		local r, g, b, a = shade(color, dist, gloom)
+		love.graphics.setColor(r, g, b, a)
+		love.graphics.polygon("fill",
+			screen_x1, top1,
+			screen_x2, top2,
+			screen_x2, bottom2,
+			screen_x1, bottom1
+		)
+	end
+	local r, g, b = shade(color, dist, gloom)
 	love.graphics.setColor(r * 1.18, g * 1.18, b * 1.18, 0.38)
 	love.graphics.line(screen_x1, top1, screen_x2, top2)
 	love.graphics.line(screen_x1, bottom1, screen_x2, bottom2)
@@ -166,6 +197,7 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 		return
 	end
 
+	local wall_tex = Textures.wall_for_floor(self.textures, self.floor_num)
 	for _, wall in ipairs(sector.walls) do
 		local door = wall.door_id and world.doors[wall.door_id] or nil
 		local is_open_portal = wall.neighbor and (not door or World.is_door_open(world, door))
@@ -188,9 +220,13 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 			end
 		else
 			local is_secret = door and door.secret and not World.is_door_open(world, door)
-				local color = (door and not is_secret) and (door.style == "shortcut" and palette.shortcut or palette.door) or palette.wall
-				self:draw_wall(camera, sector, wall, color, clip_left, clip_right, gloom)
+			local color = (door and not is_secret) and (door.style == "shortcut" and palette.shortcut or palette.door) or palette.wall
+			local tex = wall_tex
+			if door and not is_secret then
+				tex = door.style == "shortcut" and self.textures.shortcut or self.textures.door
 			end
+			self:draw_wall(camera, sector, wall, color, tex, clip_left, clip_right, gloom)
+		end
 	end
 	visited[sector_id] = nil -- per-branch: allow sector to render through other portals
 end
@@ -264,16 +300,31 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 		if sprite.occluded then
 			a = a * (entity.occluded_alpha or 0.4)
 		end
-		lg.setColor(r, g, b, a)
-		lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
-		lg.setColor(1, 1, 1, 0.12)
-		lg.rectangle("line", screen_x - size * 0.5, top, size, bottom - top)
+		local sprite_data = self.sprites[entity.kind]
+		local anim_name = entity.anim or "idle"
+		local anim = sprite_data and sprite_data[anim_name]
+		if anim then
+			local quad, img, fw, fh = Sprites.get_frame(anim, self.time)
+			local draw_w = size
+			local draw_h = (bottom - top) * (fh / fw)
+			local fade = util.clamp(1.0 - sprite.depth * 0.08 - (run_state.blackout_time > 0 and 0.75 or 0.0) * 0.22, 0.14, 1.0)
+			if sprite.occluded then fade = fade * (entity.occluded_alpha or 0.4) end
+			lg.setColor(fade, fade, fade, a)
+			lg.draw(img, quad, screen_x - draw_w * 0.5, top, 0, draw_w / fw, (bottom - top) / fh)
+		else
+			lg.setColor(r, g, b, a)
+			lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
+			lg.setColor(1, 1, 1, 0.12)
+			lg.rectangle("line", screen_x - size * 0.5, top, size, bottom - top)
+		end
 	end
 end
 
 -- renderAutomap, renderFX, renderHUD extracted to src/render/hud.lua
 
 function Renderer:draw(run_state)
+	self.floor_num = run_state.floor or 1
+	self.time = love.timer.getTime()
 	self:renderWorld(run_state.camera, run_state.world, run_state)
 
 	local sprite_entities = {}
@@ -335,6 +386,7 @@ function Renderer:draw(run_state)
 				ignore_los = run_state.player.blacklight == true,
 				occluded_alpha = 0.35,
 				active = true,
+				anim = Sprites.get_anim(enemy),
 			}
 		end
 	end

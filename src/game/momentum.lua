@@ -299,11 +299,10 @@ function Momentum:_update_wall_run(dt, player, forward_x, forward_y, world_query
 	self.wall_run_time = WALL_RUN_MAX_TIME
 	self.wall_normal_x = wall_info.normal_x
 	self.wall_normal_y = wall_info.normal_y
-	self.wall_run_side = (wall_info.normal_x * right_x + wall_info.normal_y * right_y) > 0 and "right" or "left"
-	self.stats.wall_runs = self.stats.wall_runs + 1
 	local right_x = -math.sin(player.angle)
 	local right_y = math.cos(player.angle)
 	self.wall_run_side = (wall_info.normal_x * right_x + wall_info.normal_y * right_y) > 0 and "right" or "left"
+	self.stats.wall_runs = self.stats.wall_runs + 1
 end
 
 function Momentum:_get_friction()
