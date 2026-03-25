@@ -1558,6 +1558,7 @@ function Run:try_burn_dash(charge)
 	self.player.dash_vy = dir_y * (5.4 + charge * 2.8)
 	self.player.dash_feedback_time = 0.5
 	self.stats.burn_dashes = self.stats.burn_dashes + 1
+	self.momentum:notify_tech("burn_dash_bhop")
 	self:push_message("[dash] the burst hurls you forward.")
 	return true
 end
