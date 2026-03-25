@@ -40,6 +40,7 @@ local palette = {
 	flare_marker = { 1.0, 0.78, 0.36, 1.0 },
 	burn_marker = { 0.96, 0.44, 0.28, 1.0 },
 	pillar_marker = { 0.82, 0.96, 0.76, 1.0 },
+	ghost = { 0.3, 0.85, 0.95, 0.5 },
 }
 
 local flame_palette = {
@@ -361,6 +362,20 @@ function Renderer:draw(run_state)
 			end
 		end
 
+	-- ghost silhouette
+	if run_state.settings and run_state.settings.runner_show_ghost_3d ~= false then
+		local marker = run_state.ghost_compare and run_state.ghost_compare.marker or nil
+		if marker and marker.floor == run_state.floor then
+			sprite_entities[#sprite_entities + 1] = {
+				kind = "ghost",
+				x = marker.x,
+				y = marker.y,
+				scale = 0.8,
+				active = true,
+				ignore_los = true,
+			}
+		end
+	end
 	self:renderSprites(run_state.camera, run_state.world, sprite_entities, run_state)
 	self.hud:draw(run_state, love.graphics)
 end
