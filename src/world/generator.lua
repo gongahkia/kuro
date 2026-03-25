@@ -763,6 +763,18 @@ local function build_standard_floor(config, rng, options)
 		end
 	end
 
+	-- bonfires: one per floor, always in a main room
+	local bonfire_room = main_rooms[rng:int(2, math.max(2, #main_rooms - 1))]
+	local bonfire_cell = pick_room_cell(bonfire_room, rng, reserved)
+	meta.decorations[#meta.decorations + 1] = {
+		kind = "bonfire",
+		cell = { x = bonfire_cell.x, y = bonfire_cell.y },
+		x = bonfire_cell.x - 0.5,
+		y = bonfire_cell.y - 0.5,
+		lit = false,
+	}
+	reserved[bonfire_cell.x .. ":" .. bonfire_cell.y] = true
+
 	-- vending machines in main rooms
 	local vm_count = rng:int(1, 3)
 	for _ = 1, vm_count do

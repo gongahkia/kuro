@@ -1510,6 +1510,23 @@ function Run:interact()
 		end
 	end
 
+	if self.world.decorations then
+		for _, deco in ipairs(self.world.decorations) do
+			if deco.kind == "bonfire" and deco.cell and (same_cell(deco.cell, current_cell) or same_cell(deco.cell, target_cell)) then
+				if not deco.lit then
+					deco.lit = true
+					self.player.health = math.min(self.player.max_health, self.player.health + 2)
+					self.sanity:restore(30)
+					self.player.light_charge = self.player.max_light_charge
+					self:push_message("The bonfire roars to life. You rest a moment.")
+				else
+					self:push_message("The bonfire still burns. Its warmth lingers.")
+				end
+				return
+			end
+		end
+	end
+
 	if self.world.exit and (same_cell(self.world.exit.cell, current_cell) or same_cell(self.world.exit.cell, target_cell)) then
 		if self.player.collected_torches >= self.player.torch_goal then
 			self.stats.floors_cleared = self.stats.floors_cleared + 1
