@@ -66,6 +66,17 @@ make test
 - `Replays`: record runs, save them locally, auto-save every official Sprint finish plus Sprint PB mirrors, export paired text and JSON official summaries, and replay them from the title screen
 - `Speed tech`: `Burn Dash` converts charged burst releases into movement, and `Flare Boost` rewards routing through freshly thrown flares on authored route lines
 
+## Asset Packs
+
+- [Pixel Texture Pack](https://jestan.itch.io/pixel-texture-pack) by Jestan — wall and floor textures
+- [Skeletons Pack](https://monopixelart.itch.io/skeletons-pack) by MonoPixelArt — skeleton enemy sprites
+- [Forest Monsters](https://monopixelart.itch.io/forest-monsters-pixel-art) by MonoPixelArt — mushroom enemy sprites
+- [Flying Forest Enemies](https://monopixelart.itch.io/flying-enemies) by MonoPixelArt — flying enemy and boss sprites
+- [Crafting Materials](https://beast-pixels.itch.io/crafting-materials) by Beast Pixels — item resource sprites
+- [Pixel Mart](https://ghostpixxells.itch.io/pixel-mart) by GhostPixxells — mart item sprites
+- [Pixel Art Vending Machines](https://karsiori.itch.io/pixel-art-vending-machines) by Karsiori — vending machine sprites
+- [Sci-Fi Lab Pick-Ups](https://foozlecc.itch.io/sci-fi-lab-pick-ups) by Foozle — pickup item sprites
+
 ## Structure
 
 - [`docs/mechanics.md`](/Users/gongahkia/Desktop/coding/projects/kuro/docs/mechanics.md): legacy mechanic reference
