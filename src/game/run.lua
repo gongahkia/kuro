@@ -14,7 +14,9 @@ local Audio = require("src.audio.audio")
 local AudioManifest = require("src.data.audio_manifest")
 local Relics = require("src.game.relics")
 local Stealth = require("src.game.stealth")
-local Hunger = require("src.game.hunger")
+local Sanity = require("src.game.sanity")
+local Consumables = require("src.data.consumables")
+local Challenges = require("src.game.challenges")
 
 local Renderer
 
@@ -22,6 +24,13 @@ local Run = {}
 Run.__index = Run
 
 local lore_fragments = LoreData.fragments
+local enemy_pressure = {
+	stalker = { radius = 5.5, drain = 1.6 },
+	rusher = { radius = 4.0, drain = 1.15 },
+	leech = { radius = 4.6, drain = 1.45 },
+	sentry = { radius = 5.0, drain = 0.9 },
+	umbra = { radius = 8.5, drain = 2.6 },
+}
 
 local function cell_key(cell)
 	return cell.x .. ":" .. cell.y
@@ -48,17 +57,30 @@ local function cell_center(cell)
 	return x, y
 end
 
-function Run.new(difficulty, seed, mutators, settings)
+function Run.new(difficulty, seed, mutators, settings, options)
+	options = options or {}
 	local base_profile = Difficulty.build(difficulty, 1, mutators)
+	local mode = options.mode or "classic"
+	local starting_health = base_profile.player_health - ((mutators and mutators.blacklight) and 2 or 0)
+	if mutators and mutators.ironman then
+		starting_health = 1
+	end
+	starting_health = math.max(1, starting_health)
 	local self = setmetatable({
 		difficulty = difficulty,
 		difficulty_label = base_profile.label,
 		seed = seed,
 		mutators = util.deepcopy(mutators or {}),
+		mode = mode,
+		daily_label = options.daily_label,
+		loadout = options.loadout or "default",
+		flame_color = options.flame_color or "amber",
+		replay_mode = options.replay_mode == true,
 		settings = settings or {},
 		events = Events.new(),
 		total_floors = 3,
 		floor = 1,
+		clock = 0,
 		rng = RNG.new(seed + 4049),
 		keys = {},
 		pending_interact = false,
@@ -81,6 +103,10 @@ function Run.new(difficulty, seed, mutators, settings)
 			encounters_triggered = 0,
 			anchors_lit = 0,
 			flares_used = 0,
+			consumables_used = 0,
+			wards_triggered = 0,
+			secrets_revealed = 0,
+			pillars_destroyed = 0,
 		},
 		director = {
 			threat_remaining = 0,
@@ -93,6 +119,7 @@ function Run.new(difficulty, seed, mutators, settings)
 			pulse_timer = 0,
 			summon_timer = 0,
 			wall_timer = 0,
+			weakened = 0,
 		},
 		completed = false,
 		player = {
@@ -104,8 +131,8 @@ function Run.new(difficulty, seed, mutators, settings)
 			move_speed = 2.6,
 			strafe_speed = 2.35,
 			turn_speed = 2.2,
-			max_health = base_profile.player_health,
-			health = base_profile.player_health,
+			max_health = starting_health,
+			health = starting_health,
 			max_light_charge = 100 + (mutators and mutators.embers and 10 or 0),
 			light_charge = 100 + (mutators and mutators.embers and 10 or 0),
 			collected_torches = 0,
@@ -114,7 +141,20 @@ function Run.new(difficulty, seed, mutators, settings)
 			fire_cooldown = 0,
 			burst_charge = 0,
 			flares = base_profile.flare_count,
+			consumables = { nil, nil, nil },
+			ward_charges = 0,
+			damage_taken_mult = (mutators and mutators.ironman) and 2 or 1,
+			blacklight = mutators and mutators.blacklight == true or false,
+			speed_boost_time = 0,
+			speed_boost_mult = 1.0,
+			invulnerability_time = 0,
+			second_chance_used = false,
 		},
+		time_attack_elapsed = 0,
+		time_attack_level = 0,
+		time_attack_enemy_mult = 1.0,
+		time_attack_spawn_timer = Challenges.time_attack_spawn_interval(0),
+		replay_save_requested = false,
 	}, Run)
 
 	self.fx = FX.new(self.settings)
@@ -123,10 +163,11 @@ function Run.new(difficulty, seed, mutators, settings)
 	self.audio:load_manifest(AudioManifest)
 	self.relics = Relics.new()
 	self.stealth = Stealth.new()
-	self.hunger = Hunger.new(100, 100)
+	self.sanity = Sanity.new(100)
 	self.is_moving = false
 	self.pending_riddle = nil
 	self.pending_sacrifice = nil
+	self.mode_label = mode == "daily" and "Daily Challenge" or (mode == "time_attack" and "Time Attack" or "Classic")
 	self.events:on("player_damaged", function()
 		self.fx:trigger_shake(0.4, 0.2)
 		self.audio:play("player_hit")
@@ -151,6 +192,9 @@ function Run.new(difficulty, seed, mutators, settings)
 	self.events:on("pickup_collected", function(e)
 		if e.pickup.kind == "torch" then self.audio:play("pickup_torch") end
 	end)
+	if self.loadout == "scout" then
+		self.player.flares = self.player.flares + 2
+	end
 	self:load_floor(1)
 	return self
 end
@@ -160,6 +204,13 @@ function Run:summary()
 		seed = self.seed,
 		difficulty = self.difficulty_label,
 		floor = self.floor,
+		mode = self.mode,
+		mode_label = self.mode_label,
+		daily_label = self.daily_label,
+		loadout = self.loadout,
+		flame_color = self.flame_color,
+		duration = self.clock,
+		sanity_left = self.sanity.sanity,
 		stats = util.deepcopy(self.stats),
 	}
 end
@@ -182,9 +233,13 @@ function Run:load_floor(floor)
 	self.player.collected_torches = 0
 	self.player.inventory_torches = 0
 	self.player.torch_goal = floor < self.total_floors and config.torch_goal or #self.world.anchors
-		self.player.flares = config.flare_count
+	self.player.flares = config.flare_count + ((floor == 1 and self.loadout == "scout") and 2 or 0)
 	self.player.light_charge = self.player.max_light_charge
 	self.player.burst_charge = 0
+	self.player.speed_boost_time = 0
+	self.player.speed_boost_mult = 1.0
+	self.player.invulnerability_time = 0
+	self.player.second_chance_used = false
 	self.blackout_time = 0
 	self.alarm_time = 0
 	self.guidance_time = 0
@@ -205,12 +260,19 @@ function Run:load_floor(floor)
 		pulse_timer = 4,
 		summon_timer = 6,
 		wall_timer = 5,
+		weakened = self.boss and self.boss.weakened or 0,
 	}
+	self:refresh_secret_clues()
 
 	if floor == self.total_floors then
 		self:push_message(string.format("Floor %d: the chamber breathes. Carry fire to %d anchors.", floor, #self.world.anchors))
 	else
 		self:push_message(string.format("Floor %d: collect %d torches and breach the exit.", floor, config.torch_goal))
+	end
+	if self.mode == "daily" and self.daily_label then
+		self:push_message("Daily profile " .. self.daily_label .. ".")
+	elseif self.mode == "time_attack" then
+		self:push_message("Time attack active: pressure escalates every 30 seconds.")
 	end
 	self:reveal_nearby()
 	self.events:emit("floor_loaded", { floor = floor })
@@ -226,6 +288,26 @@ function Run:alarm_enemies(duration)
 end
 
 function Run:damage_player(amount, reason)
+	if self.player.invulnerability_time > 0 then
+		return
+	end
+	amount = math.max(0, amount or 0) * (self.player.damage_taken_mult or 1.0)
+	if self.player.ward_charges > 0 and amount > 0 then
+		self.player.ward_charges = self.player.ward_charges - 1
+		self.player.invulnerability_time = 1.4
+		self.stats.wards_triggered = self.stats.wards_triggered + 1
+		self.sanity:restore(12)
+		self:push_message("A ward cracks and shields you from the blow.")
+		return
+	end
+	if self.player.health - amount <= 0 and self.relics:has_effect("second_chance") and not self.player.second_chance_used then
+		self.player.second_chance_used = true
+		self.player.health = 1
+		self.player.invulnerability_time = 1.8
+		self.sanity:restore(18)
+		self:push_message("Undying Ember flares and denies the dark.")
+		return
+	end
 	self.player.health = math.max(0, self.player.health - amount)
 	self.damage_flash = 0.32
 	self.stats.damage_taken = self.stats.damage_taken + amount
@@ -265,6 +347,138 @@ function Run:current_objective_cell()
 		end
 	end
 	return nil
+end
+
+function Run:restore_sanity(amount, message)
+	self.sanity:restore(amount)
+	if message then
+		self:push_message(message)
+	end
+end
+
+function Run:apply_sanity_shock(amount, message)
+	self.sanity:apply(amount)
+	if message then
+		self:push_message(message)
+	end
+end
+
+function Run:add_consumable(kind)
+	for index = 1, 3 do
+		if not self.player.consumables[index] then
+			self.player.consumables[index] = kind
+			return true, index
+		end
+	end
+	return false
+end
+
+function Run:spawn_pickup(kind, cell, extra)
+	local x, y = cell_center(cell)
+	local pickup = {
+		kind = kind,
+		cell = { x = cell.x, y = cell.y },
+		x = x,
+		y = y,
+		active = true,
+		radius = 0.24,
+	}
+	if extra then
+		for key, value in pairs(extra) do
+			pickup[key] = value
+		end
+	end
+	self.world.pickups[#self.world.pickups + 1] = pickup
+	return pickup
+end
+
+function Run:get_current_tags()
+	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
+	return World.get_cell_tags(self.world, cell_x, cell_y) or {}
+end
+
+function Run:get_enemy_pressure()
+	local total = 0
+	for _, enemy in ipairs(self.world.enemies) do
+		if enemy.alive ~= false then
+			local spec = enemy_pressure[enemy.kind]
+			if spec then
+				local distance = util.distance(self.player.x, self.player.y, enemy.x, enemy.y)
+				if distance <= spec.radius then
+					total = total + spec.drain * (1 - (distance / spec.radius) * 0.65)
+				end
+			end
+		end
+	end
+	return math.max(0, total)
+end
+
+function Run:refresh_secret_clues()
+	if not self.world or not self.world.secret_walls then
+		return
+	end
+	for _, secret in ipairs(self.world.secret_walls) do
+		if secret.reveal_method == "lore_clue" and not secret.revealed then
+			local required = secret.required_fragment
+			local unlocked = required == nil or (self.codex and self.codex:is_fragment_found(required))
+			if unlocked then
+				secret.revealed = true
+				self.stats.secrets_revealed = self.stats.secrets_revealed + 1
+				local door = World.get_door_between(self.world, secret.cell_a.x, secret.cell_a.y, secret.cell_b.x, secret.cell_b.y)
+				if door then
+					door.secret = false
+					door.target = 1
+				end
+				self:push_message("[clue] a remembered fragment exposes a hidden seam.")
+			end
+		end
+	end
+end
+
+function Run:damage_pillar(pillar, amount)
+	if not pillar or pillar.destroyed then
+		return false
+	end
+	pillar.health = pillar.health - amount
+	if pillar.health <= 0 then
+		pillar.destroyed = true
+		self.boss.weakened = (self.boss.weakened or 0) + 1
+		self.stats.pillars_destroyed = self.stats.pillars_destroyed + 1
+		self:push_message("[crash] a pillar collapses and Umbra's rhythm falters.")
+		return true
+	end
+	return false
+end
+
+function Run:try_damage_pillars_in_cone(range, half_angle, damage)
+	for _, pillar in ipairs(self.world.pillars or {}) do
+		if not pillar.destroyed then
+			local dx = pillar.x - self.player.x
+			local dy = pillar.y - self.player.y
+			local distance = math.sqrt(dx * dx + dy * dy)
+			if distance <= range then
+				local angle_to = math.atan(dy, dx)
+				local diff = math.abs(((angle_to - self.player.angle + math.pi) % (math.pi * 2)) - math.pi)
+				if diff <= half_angle then
+					self:damage_pillar(pillar, damage)
+				end
+			end
+		end
+	end
+end
+
+function Run:drop_enemy_loot(enemy)
+	local cell = { x = select(1, World.world_to_cell(enemy.x, enemy.y)), y = select(2, World.world_to_cell(enemy.x, enemy.y)) }
+	local roll = self.rng:float()
+	if enemy.kind == "leech" and roll < 0.24 then
+		self:spawn_pickup("calming_tonic", cell)
+	elseif enemy.kind == "sentry" and roll < 0.22 then
+		self:spawn_pickup("ward_charge", cell)
+	elseif enemy.kind == "rusher" and roll < 0.18 then
+		self:spawn_pickup("speed_tonic", cell)
+	elseif roll < 0.12 then
+		self:spawn_pickup("ration", cell)
+	end
 end
 
 function Run:reveal_nearby()
@@ -310,8 +524,17 @@ function Run:reveal_path_to_objective()
 	local path = World.find_path(self.world, { x = start_x, y = start_y }, objective, true)
 	self.guidance_cells = {}
 	if path then
+		local noise = self.sanity:get_effects().guidance_noise
 		for _, cell in ipairs(path) do
-			self.guidance_cells[cell_key(cell)] = true
+			local picked = cell
+			if noise > 0 and self.rng:chance(noise) then
+				local neighbors = World.neighbors(self.world, cell.x, cell.y, { allow_closed_doors = true })
+				if #neighbors > 0 then
+					local choice = neighbors[self.rng:int(1, #neighbors)]
+					picked = { x = choice.x, y = choice.y }
+				end
+			end
+			self.guidance_cells[cell_key(picked)] = true
 		end
 	end
 	self.guidance_time = (self.mutators.echoes and 14 or 10)
@@ -379,13 +602,13 @@ function Run:update_player(dt)
 		turn = turn + 1
 	end
 
-	local jitter = self.hunger:get_control_jitter()
+	local jitter = self.sanity:get_effects().control_jitter
 	self.player.angle = util.wrap_angle(self.player.angle + turn * self.player.turn_speed * dt + (jitter > 0 and (math.random() - 0.5) * jitter * dt or 0))
 
 	local stealth_mult = self.stealth:get_speed_multiplier()
 	local dark_mult = (self.blackout_time > 0 and self.relics:get_value("dark_speed_mult", 1.0)) or 1.0
-	local move_speed = self.player.move_speed * stealth_mult * dark_mult
-	local strafe_speed = self.player.strafe_speed * stealth_mult * dark_mult
+	local move_speed = self.player.move_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
+	local strafe_speed = self.player.strafe_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
 	local forward_x = math.cos(self.player.angle)
 	local forward_y = math.sin(self.player.angle)
 	local right_x = -math.sin(self.player.angle)
@@ -461,6 +684,7 @@ end
 function Run:handle_enemy_death(enemy)
 	enemy.alive = false
 	self.stats.enemies_burned = self.stats.enemies_burned + 1
+	self:drop_enemy_loot(enemy)
 	self.events:emit("enemy_killed", { enemy = enemy })
 	if enemy.modifier then
 		local EnemyData = require("src.data.enemies")
@@ -521,8 +745,7 @@ function Run:update_encounters()
 end
 
 function Run:collect_pickup(pickup)
-	pickup.active = false
-	self.events:emit("pickup_collected", { pickup = pickup })
+	local consumed = true
 	if pickup.kind == "torch" then
 		self.player.collected_torches = self.player.collected_torches + 1
 		self.player.inventory_torches = self.player.inventory_torches + 1
@@ -530,17 +753,18 @@ function Run:collect_pickup(pickup)
 		self.player.max_light_charge = math.min(180, self.player.max_light_charge + light_bonus)
 		self.player.light_charge = math.min(self.player.max_light_charge, self.player.light_charge + 24)
 		self.stats.torches_collected = self.stats.torches_collected + 1
-		self.hunger:feed(12)
+		self.sanity:restore(8)
 		self:push_message(string.format("Torch claimed %d / %d.", self.player.collected_torches, self.player.torch_goal))
 	elseif pickup.kind == "shrine" then
 		self.player.health = math.min(self.player.max_health, self.player.health + 2)
 		self.player.light_charge = self.player.max_light_charge
-		self.hunger:restore_sanity(30)
+		self.sanity:restore(34)
 		self:push_message("The shrine steadies your breathing and flame.")
 	elseif pickup.kind == "ration" then
-		self.hunger:feed(35)
+		self.sanity:restore(18)
 		self:push_message("You consume the ration. The shaking eases.")
 	elseif pickup.kind == "note" then
+		self.sanity:restore(10)
 		self:push_message("[note] " .. (pickup.text or "The ink has faded."))
 		if self.codex then
 			local lore = LoreData.fragments
@@ -548,6 +772,7 @@ function Run:collect_pickup(pickup)
 			local entry = lore[((self.director.lore_index - 1) % #lore) + 1]
 			self.codex:discover_fragment(entry.id)
 		end
+		self:refresh_secret_clues()
 	elseif pickup.kind == "relic" then
 		local RelicData = require("src.data.relics")
 		local pool = {}
@@ -561,7 +786,50 @@ function Run:collect_pickup(pickup)
 				self:push_message("Your hands are full. The relic crumbles.")
 			end
 		end
+	elseif Consumables.get(pickup.kind) then
+		local added = self:add_consumable(pickup.kind)
+		if added then
+			self:push_message("Recovered " .. Consumables.get(pickup.kind).label .. ".")
+		else
+			consumed = false
+			self:push_message("Your belt is full. Leave something or move on.")
+		end
 	end
+	if consumed then
+		pickup.active = false
+		self.events:emit("pickup_collected", { pickup = pickup })
+	end
+	return consumed
+end
+
+function Run:use_consumable(slot)
+	local kind = self.player.consumables[slot]
+	if not kind then
+		self:push_message("That belt slot is empty.")
+		return
+	end
+
+	local def = Consumables.get(kind)
+	if not def then
+		self.player.consumables[slot] = nil
+		return
+	end
+
+	if kind == "calming_tonic" then
+		self.sanity:restore(38)
+		self:push_message("The tonic steadies your breathing.")
+	elseif kind == "speed_tonic" then
+		self.player.speed_boost_time = def.duration or 8.0
+		self.player.speed_boost_mult = def.speed_mult or 1.25
+		self:push_message("Your steps turn sharp and urgent.")
+	elseif kind == "ward_charge" then
+		self.player.ward_charges = self.player.ward_charges + 1
+		self.sanity:restore(def.restore_sanity or 16)
+		self:push_message("A ward settles around your flame.")
+	end
+
+	self.player.consumables[slot] = nil
+	self.stats.consumables_used = self.stats.consumables_used + 1
 end
 
 function Run:try_use_anchor(anchor)
@@ -576,6 +844,7 @@ function Run:try_use_anchor(anchor)
 	anchor.lit = true
 	self.player.inventory_torches = self.player.inventory_torches - 1
 	self.stats.anchors_lit = self.stats.anchors_lit + 1
+	self.sanity:restore(8)
 	self:push_message(string.format("Anchor lit %d / %d.", self.stats.anchors_lit, #self.world.anchors))
 	if self.stats.anchors_lit >= #self.world.anchors then
 		self.completed = true
@@ -602,6 +871,9 @@ function Run:interact()
 			elseif reward == "flare" then
 				self.player.flares = self.player.flares + 1
 				self:push_message("A flare materializes in your hand.")
+			elseif reward == "tonic" then
+				self:add_consumable("calming_tonic")
+				self:push_message("The riddle yields a calming tonic.")
 			end
 			self.pending_riddle = nil
 		else
@@ -613,6 +885,7 @@ function Run:interact()
 	if self.pending_sacrifice then
 		self:damage_player(self.pending_sacrifice.cost, "You offer blood to the altar.")
 		self.player.light_charge = self.player.max_light_charge
+		self.sanity:restore(20)
 		self:push_message("The altar drinks and your flame roars.")
 		self.pending_sacrifice = nil
 		return
@@ -670,6 +943,7 @@ function Run:release_burst()
 	self.player.light_charge = self.player.light_charge - cost
 	self.player.burst_charge = 0
 	self.stealth:add_burst_noise()
+	self:try_damage_pillars_in_cone(3.4 + charge * 2.2, math.rad(50), 22 + charge * 18)
 	self.events:emit("burst_released", { charge = charge })
 	self:push_message("[flare-burst] the chamber recoils from the light.")
 	for _, enemy in ipairs(self.world.enemies) do
@@ -704,6 +978,7 @@ function Run:release_burst()
 						door.secret = false
 						door.target = 1
 					end
+					self.stats.secrets_revealed = self.stats.secrets_revealed + 1
 					self:push_message("[crack] a hidden passage shudders open.")
 				end
 			end
@@ -746,6 +1021,7 @@ function Run:use_light(dt)
 	if self.keys.f and self.player.fire_cooldown <= 0 and self.player.light_charge > 4 then
 		self.player.light_charge = math.max(0, self.player.light_charge - 24 * dt)
 		self.player.fire_cooldown = 0.04
+		self:try_damage_pillars_in_cone(4.0, math.rad(22), 18 * dt)
 		for _, enemy in ipairs(self.world.enemies) do
 			if enemy.alive ~= false and weapon_cone_hit(self, enemy) then
 				enemy.health = enemy.health - 28 * dt
@@ -764,7 +1040,7 @@ function Run:use_light(dt)
 		if self.mutators.embers then
 			recovery = recovery + 3
 		end
-		recovery = recovery * self.relics:get_value("light_recovery_mult", 1.0)
+		recovery = recovery * self.relics:get_value("light_recovery_mult", 1.0) * self.sanity:get_effects().light_recovery_mult
 		self.player.light_charge = math.min(self.player.max_light_charge, self.player.light_charge + recovery * dt)
 	end
 end
@@ -809,10 +1085,49 @@ function Run:update_hazards(dt)
 	end
 end
 
+function Run:update_sanity(dt)
+	local tags = self:get_current_tags()
+	local status = self.sanity:update(dt, {
+		blackout_time = self.blackout_time,
+		in_safe_zone = tags.safe_zone == true,
+		in_dark_zone = tags.dark_zone == true or self.boss.fog_active == true,
+		in_cursed_zone = tags.cursed_zone == true,
+		enemy_pressure = self:get_enemy_pressure(),
+		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0),
+	})
+	self.sanity_status = status
+end
+
+function Run:update_time_attack(dt)
+	if self.mode ~= "time_attack" or self.completed then
+		self.time_attack_enemy_mult = 1.0
+		return
+	end
+
+	self.time_attack_elapsed = self.time_attack_elapsed + dt
+	local level = Challenges.time_attack_level(self.time_attack_elapsed)
+	if level > self.time_attack_level then
+		self.time_attack_level = level
+		self:push_message(string.format("[timer] pressure rises to level %d.", level))
+	end
+	self.time_attack_enemy_mult = Challenges.time_attack_enemy_mult(self.time_attack_level)
+	self.time_attack_spawn_timer = self.time_attack_spawn_timer - dt
+	if self.time_attack_spawn_timer <= 0 then
+		local spawn_kind = self.time_attack_level >= 4 and "rusher" or (self.time_attack_level >= 2 and "leech" or "stalker")
+		local origin = self.floor == self.total_floors and self.world.bossRoom and self.world.bossRoom.center or self:current_objective_cell()
+		if origin then
+			self:spawn_enemy(spawn_kind, origin, self.time_attack_level >= 5 and "swift" or nil)
+		end
+		self.time_attack_spawn_timer = Challenges.time_attack_spawn_interval(self.time_attack_level)
+	end
+end
+
 function Run:update_boss(dt)
 	if self.floor ~= self.total_floors or not self.boss.active or self.completed then
 		return
 	end
+	local boss_challenge_mult = Challenges.time_attack_boss_mult(self.time_attack_level or 0)
+	local weaken_factor = 1 + (self.boss.weakened or 0) * 0.16
 
 	-- phase determination: 5 phases
 	local prev_phase = self.boss.phase
@@ -858,7 +1173,8 @@ function Run:update_boss(dt)
 			end
 		end
 		self.blackout_time = math.max(self.blackout_time, 1.0 + self.boss.phase * 0.4)
-		self.boss.pulse_timer = math.max(1.2, 4.3 - self.boss.phase * 0.8)
+		self.sanity:apply(6 + self.boss.phase * 1.5)
+		self.boss.pulse_timer = math.max(1.2, ((4.3 - self.boss.phase * 0.8) * weaken_factor) / boss_challenge_mult)
 		self:push_message("[pulse] Umbra exhales through the room.")
 	end
 
@@ -875,7 +1191,7 @@ function Run:update_boss(dt)
 				self:queue_hazard({ x = bx, y = by }, 0.6, 1.0, 1)
 			end
 		end
-		self.boss.beam_timer = math.max(0.8, 2.5 - self.boss.phase * 0.3)
+		self.boss.beam_timer = math.max(0.8, ((2.5 - self.boss.phase * 0.3) * weaken_factor) / boss_challenge_mult)
 	end
 
 	-- wall hazards (phase 2+)
@@ -885,7 +1201,7 @@ function Run:update_boss(dt)
 				self:queue_hazard({ x = cell.x, y = cell.y }, 0.95, 1.5, 1)
 			end
 		end
-		self.boss.wall_timer = math.max(1.8, 5.0 - self.boss.phase * 0.8)
+		self.boss.wall_timer = math.max(1.8, ((5.0 - self.boss.phase * 0.8) * weaken_factor) / boss_challenge_mult)
 		self:push_message("[crack] the chamber folds into harsher geometry.")
 	end
 
@@ -893,12 +1209,13 @@ function Run:update_boss(dt)
 	if self.boss.phase >= 3 and self.boss.fog_timer <= 0 then
 		self.boss.fog_active = true
 		self.boss.fog_duration = 4.0
-		self.boss.fog_timer = math.max(4.0, 8.0 - self.boss.phase)
+		self.boss.fog_timer = math.max(4.0, ((8.0 - self.boss.phase) * weaken_factor) / boss_challenge_mult)
 		self:push_message("[smother] light-dampening fog fills the arena.")
 	end
 	if self.boss.fog_active then
 		self.boss.fog_duration = self.boss.fog_duration - dt
 		self.blackout_time = math.max(self.blackout_time, 0.5)
+		self.sanity:apply(1.4 * dt)
 		if self.boss.fog_duration <= 0 then
 			self.boss.fog_active = false
 		end
@@ -907,7 +1224,8 @@ function Run:update_boss(dt)
 	-- darkness pulses (phase 4+)
 	if self.boss.phase >= 4 and self.boss.darkness_pulse_timer <= 0 then
 		self.blackout_time = math.max(self.blackout_time, 1.0)
-		self.boss.darkness_pulse_timer = 2.0
+		self.sanity:apply(10)
+		self.boss.darkness_pulse_timer = (2.0 * weaken_factor) / boss_challenge_mult
 	end
 
 	-- summon waves
@@ -927,7 +1245,7 @@ function Run:update_boss(dt)
 			self:spawn_enemy("leech", self.world.bossRoom.center, "cursed")
 			self:spawn_enemy("stalker", self.world.bossRoom.center, "swift")
 		end
-		self.boss.summon_timer = math.max(1.5, 5.0 - self.boss.phase * 0.8)
+		self.boss.summon_timer = math.max(1.5, ((5.0 - self.boss.phase * 0.8) * weaken_factor) / boss_challenge_mult)
 	end
 
 	-- phase 5: Umbra becomes aggressive (handled in AI via context)
@@ -947,21 +1265,22 @@ end
 
 function Run:update(dt)
 	if self.paused then return nil end
+	self.clock = self.clock + dt
 	self.damage_flash = math.max(0, self.damage_flash - dt)
 	self.blackout_time = math.max(0, self.blackout_time - dt)
 	self.alarm_time = math.max(0, self.alarm_time - dt)
 	self.guidance_time = math.max(0, self.guidance_time - dt)
+	self.player.invulnerability_time = math.max(0, self.player.invulnerability_time - dt)
+	self.player.speed_boost_time = math.max(0, self.player.speed_boost_time - dt)
+	self.player.speed_boost_mult = self.player.speed_boost_time > 0 and self.player.speed_boost_mult or 1.0
 	if self.guidance_time <= 0 then
 		self.guidance_cells = {}
 	end
 
+	self:update_time_attack(dt)
 	self.stealth:update(dt, self.keys, self.keys.f, self.is_moving)
-	self.hunger:update(dt, {
-		blackout_time = self.blackout_time,
-		relics = self.relics,
-		damage_player = function(amount, reason) self:damage_player(amount, reason) end,
-	})
 	self:update_player(dt)
+	self:update_sanity(dt)
 	self:update_doors(dt)
 	self:update_flares(dt)
 	self:use_light(dt)
@@ -1003,10 +1322,11 @@ function Run:draw()
 			and string.format("Objective: recover %d more torches.", self.player.torch_goal - self.player.collected_torches)
 			or "Objective: reach the exit.")
 		or string.format("Objective: light %d remaining anchors.", #self.world.anchors - self.stats.anchors_lit)
+	local view_distortion = self.sanity:get_effects().view_distortion
 	self.camera = {
 		x = self.player.x,
 		y = self.player.y,
-		angle = self.player.angle,
+		angle = self.player.angle + math.sin(self.clock * 1.6) * view_distortion * 0.05,
 		height = self.player.height,
 	}
 	self.fx:apply_camera(self.camera, self.is_moving)
@@ -1021,6 +1341,8 @@ function Run:keypressed(key)
 		if key == "escape" then
 			self.paused = false
 			self.renderer.hud.paused = false
+		elseif key == "v" or key == "s" then
+			self.replay_save_requested = true
 		else
 			self.renderer.hud:pause_keypressed(key)
 		end
@@ -1029,6 +1351,12 @@ function Run:keypressed(key)
 	self.keys[key] = true
 	if key == "space" then
 		self.pending_interact = true
+	elseif key == "1" then
+		self:use_consumable(1)
+	elseif key == "2" then
+		self:use_consumable(2)
+	elseif key == "3" then
+		self:use_consumable(3)
 	elseif key == "g" then
 		self.pending_flare = true
 	elseif key == "tab" then
