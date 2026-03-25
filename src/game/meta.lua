@@ -2,11 +2,19 @@ local Meta = {}
 Meta.__index = Meta
 
 local unlock_defs = {
-	{ id = "mutator_ironman", label = "Ironman", desc = "1 HP, double damage", condition = function(m) return m.total_victories >= 3 end },
-	{ id = "mutator_blacklight", label = "Blacklight", desc = "See enemies through walls, -2 HP", condition = function(m) return m.total_runs >= 5 end },
-	{ id = "loadout_scout", label = "Scout", desc = "Start with +2 flares", condition = function(m) return m.damageless_floor2 end },
-	{ id = "light_color_red", label = "Red Flame", desc = "Cosmetic red light", condition = function(m) return m.total_burns >= 50 end },
-	{ id = "light_color_blue", label = "Blue Flame", desc = "Cosmetic blue light", condition = function(m) return m.total_burns >= 100 end },
+	{ id = "mutator_ironman", group = "mutator", value = "ironman", label = "Ironman", desc = "1 HP, double incoming damage.", condition = function(m) return m.total_victories >= 3 end },
+	{ id = "mutator_blacklight", group = "mutator", value = "blacklight", label = "Blacklight", desc = "See enemies through walls, lose 2 max HP.", condition = function(m) return m.total_runs >= 5 end },
+	{ id = "loadout_scout", group = "loadout", value = "scout", label = "Scout", desc = "Start each run with 2 extra flares.", condition = function(m) return m.damageless_floor2 end },
+	{ id = "light_color_red", group = "flame", value = "red", label = "Red Flame", desc = "Cosmetic ember-red flame color.", condition = function(m) return m.total_burns >= 50 end },
+	{ id = "light_color_blue", group = "flame", value = "blue", label = "Blue Flame", desc = "Cosmetic hollow-blue flame color.", condition = function(m) return m.total_burns >= 100 end },
+}
+
+local base_mutators = { "embers", "echoes", "onslaught" }
+local base_loadouts = {
+	{ id = "default", label = "Descender", desc = "Standard descent loadout." },
+}
+local base_flames = {
+	{ id = "amber", label = "Amber Flame", desc = "Default warm survival flame." },
 }
 
 function Meta.new(settings)
@@ -49,13 +57,62 @@ function Meta:is_unlocked(id)
 end
 
 function Meta:get_available_mutators()
-	local base = { "embers", "echoes", "onslaught" }
+	local base = {}
+	for _, id in ipairs(base_mutators) do
+		base[#base + 1] = id
+	end
 	for _, def in ipairs(unlock_defs) do
-		if def.id:find("^mutator_") and self.unlocks[def.id] then
-			base[#base + 1] = def.id:sub(9) -- strip "mutator_" prefix
+		if def.group == "mutator" and self.unlocks[def.id] then
+			base[#base + 1] = def.value
 		end
 	end
 	return base
+end
+
+function Meta:get_available_loadouts()
+	local available = {}
+	for _, def in ipairs(base_loadouts) do
+		available[#available + 1] = {
+			id = def.id,
+			label = def.label,
+			desc = def.desc,
+			unlocked = true,
+		}
+	end
+	for _, def in ipairs(unlock_defs) do
+		if def.group == "loadout" and self.unlocks[def.id] then
+			available[#available + 1] = {
+				id = def.value,
+				label = def.label,
+				desc = def.desc,
+				unlocked = true,
+			}
+		end
+	end
+	return available
+end
+
+function Meta:get_available_flames()
+	local available = {}
+	for _, def in ipairs(base_flames) do
+		available[#available + 1] = {
+			id = def.id,
+			label = def.label,
+			desc = def.desc,
+			unlocked = true,
+		}
+	end
+	for _, def in ipairs(unlock_defs) do
+		if def.group == "flame" and self.unlocks[def.id] then
+			available[#available + 1] = {
+				id = def.value,
+				label = def.label,
+				desc = def.desc,
+				unlocked = true,
+			}
+		end
+	end
+	return available
 end
 
 function Meta:get_all_unlocks()
@@ -63,6 +120,8 @@ function Meta:get_all_unlocks()
 	for _, def in ipairs(unlock_defs) do
 		result[#result + 1] = {
 			id = def.id,
+			group = def.group,
+			value = def.value,
 			label = def.label,
 			desc = def.desc,
 			unlocked = self.unlocks[def.id] == true,
