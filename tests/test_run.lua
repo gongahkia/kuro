@@ -1,4 +1,5 @@
 local Run = require("src.game.run")
+local World = require("src.world.world")
 
 local function find_pickup(run, kind)
 	for _, pickup in ipairs(run.world.pickups) do
@@ -150,5 +151,67 @@ return {
 		assert(run.practice_goal ~= nil, "expected drill practice goal")
 		assert(run.practice_goal.route_id == "flare_line_2", "expected flare line route id")
 		assert(run.player.x ~= run.world.spawn.x or run.player.y ~= run.world.spawn.y, "expected drill reposition from spawn")
+	end,
+
+	["route checkpoints reward flare lines and burn gates"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			official_record_eligible = true,
+		})
+		local burn_gate = run.world.routeNodes.burn_lane_1.gate_cells[1]
+		run.player.light_charge = 40
+		run.player.dash_time = 0.2
+		run.player.x, run.player.y = World.cell_to_world(burn_gate)
+		run:update_route_progress()
+		assert(run.route_events.burn_lane_dashes == 1, "expected burn gate route event")
+		assert(run.player.light_charge > 40, "expected burn gate light refund")
+
+		local checkpoint = run.world.routeNodes.flare_line_1.checkpoints[1]
+		run.player.x, run.player.y = World.cell_to_world(checkpoint)
+		run.player.flare_line_window = 0.5
+		run:update_route_progress()
+		assert(run.route_events.flare_line_boosts == 1, "expected flare checkpoint route event")
+		assert(run.player.speed_boost_time > 1.0, "expected flare checkpoint extension")
+	end,
+
+	["boss route bonuses stay soft but reward the authored line"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			official_record_eligible = true,
+		})
+		run:load_floor(3)
+		local pillar
+		for _, entry in ipairs(run.world.pillars) do
+			if entry.route_priority == 1 then
+				pillar = entry
+				break
+			end
+		end
+		assert(pillar ~= nil, "expected authored route pillar")
+		assert(run:damage_pillar(pillar, pillar.health), "expected pillar destruction")
+		assert(run.boss.route.bonus_active == true, "expected active route bonus")
+
+		local anchor
+		for _, entry in ipairs(run.world.anchors) do
+			if entry.route_priority == 1 then
+				anchor = entry
+				break
+			end
+		end
+		assert(anchor ~= nil, "expected authored route anchor")
+		run.player.x = anchor.x - 1.9
+		run.player.y = anchor.y
+		local current_x, current_y = World.world_to_cell(run.player.x, run.player.y)
+		assert(run:can_reach_anchor(anchor, { x = current_x, y = current_y }, { x = current_x, y = current_y }) == true, "expected anchor range bonus")
+		run.player.inventory_torches = 1
+		run:try_use_anchor(anchor)
+		assert(run.boss.route.bonus_active == false, "expected bonus to consume on anchor")
+		assert(run.boss.route.next_anchor_priority == 2, "expected anchor order progress")
 	end,
 }
