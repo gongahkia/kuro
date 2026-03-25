@@ -50,6 +50,16 @@ function World.get_cell(world, x, y)
 	return world.cells[y][x]
 end
 
+function World.get_cell_tags(world, x, y)
+	local cell = World.get_cell(world, x, y)
+	return cell and cell.tags or nil
+end
+
+function World.cell_has_tag(world, x, y, tag)
+	local tags = World.get_cell_tags(world, x, y)
+	return tags ~= nil and tags[tag] == true
+end
+
 function World.is_walkable(world, x, y)
 	local cell = World.get_cell(world, x, y)
 	return cell ~= nil and cell.walkable == true
@@ -239,6 +249,10 @@ function World.build(meta)
 		encounterNodes = util.deepcopy(meta.encounterNodes or {}),
 		enemies = util.deepcopy(meta.enemies or {}),
 		anchors = util.deepcopy(meta.anchors or {}),
+		decorations = util.deepcopy(meta.decorations or {}),
+		secret_walls = util.deepcopy(meta.secret_walls or {}),
+		pillars = util.deepcopy(meta.pillars or {}),
+		sanityZones = util.deepcopy(meta.sanityZones or { safe = {}, dark = {}, cursed = {} }),
 		exit = meta.exit and util.deepcopy(meta.exit) or nil,
 		spawn = util.deepcopy(meta.spawn),
 		bossRoom = meta.bossRoom and util.deepcopy(meta.bossRoom) or nil,
@@ -336,6 +350,13 @@ function World.build(meta)
 			enemy.patrol_x = enemy.patrol.x - 0.5
 			enemy.patrol_y = enemy.patrol.y - 0.5
 		end
+	end
+	for _, decoration in ipairs(world.decorations) do
+		attach_position(world, decoration)
+	end
+	for _, pillar in ipairs(world.pillars) do
+		pillar.destroyed = pillar.destroyed == true
+		attach_position(world, pillar)
 	end
 
 	return world
