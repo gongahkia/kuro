@@ -14,4 +14,9 @@ return {
 	{ name = "boss_phase1", path = "assets/music/boss1.ogg", kind = "music" },
 	{ name = "boss_phase2", path = "assets/music/boss2.ogg", kind = "music" },
 	{ name = "boss_phase3", path = "assets/music/boss3.ogg", kind = "music" },
+	{ name = "wind_loop", path = "assets/sfx/wind.ogg", kind = "sfx" },
+	{ name = "slide_whoosh", path = "assets/sfx/slide.ogg", kind = "sfx" },
+	{ name = "bhop_thump", path = "assets/sfx/bhop.ogg", kind = "sfx" },
+	{ name = "wall_scrape", path = "assets/sfx/wall_scrape.ogg", kind = "sfx" },
+	{ name = "chain_milestone", path = "assets/sfx/chain.ogg", kind = "sfx" },
 }

@@ -1043,6 +1043,9 @@ function App:draw_result()
 		footer = footer .. "  [1/2/3] Practice Floors  [D] Targets  [G] PB Replay"
 	end
 	draw_centered(lg, footer, height * 0.86, width, { 0.55, 0.58, 0.64, 1.0 })
+	if self.run and self.run.renderer and self.run.renderer.hud then -- detailed analytics overlay
+		self.run.renderer.hud:draw_results(self.run, lg)
+	end
 end
 
 function App:draw()

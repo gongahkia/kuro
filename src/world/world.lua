@@ -372,4 +372,14 @@ function World.build(meta)
 	return world
 end
 
+function World.break_wall(world, x, y)
+	if world.cells[y] and world.cells[y][x] and world.cells[y][x].tags.breakable then
+		world.cells[y][x].walkable = true
+		world.cells[y][x].tags.breakable = nil
+		world.cells[y][x].tags.broken_wall = true
+		return true
+	end
+	return false
+end
+
 return World

@@ -23,6 +23,8 @@ local WALL_ANGLE_THRESHOLD = math.rad(15)
 local WALL_KICK_SPEED = 3.0
 local PROPULSION_ACCEL = 4.0
 local BASE_SPEED_CAP = 5.2 -- matches move_speed
+local JUMP_BUFFER_TIME = 0.1 -- ~6 frames at 60fps
+local COYOTE_TIME = 0.083 -- ~5 frames
 
 function Momentum.new()
 	return setmetatable({
@@ -35,6 +37,8 @@ function Momentum.new()
 		air_time = 0,
 		airborne = false,
 		jump_requested = false,
+		jump_buffer = 0,
+		coyote_timer = 0,
 		bhop_pending = false,
 		wall_run_time = 0,
 		wall_run_side = nil,
@@ -45,6 +49,8 @@ function Momentum.new()
 		chain_timer = 0,
 		technique = "none", -- none/slide/air/wall/chain
 		propulsion_force = 0,
+		last_tech = nil,
+		chain_milestone = false,
 		stats = {
 			slides = 0,
 			bhops = 0,
@@ -89,16 +95,21 @@ function Momentum:notify_tech(tech_name)
 	}
 	local bonus = bonuses[tech_name]
 	if bonus then
+		local prev = self.chain_bonus
 		self.chain_bonus = math.min(MAX_CHAIN, self.chain_bonus * bonus)
 		self.chain_timer = CHAIN_DECAY_TIME
 		if self.chain_bonus > 1.1 then
 			self.stats.chains = self.stats.chains + 1
 		end
+		if (prev < 1.5 and self.chain_bonus >= 1.5) or (prev < 2.0 and self.chain_bonus >= 2.0) then
+			self.chain_milestone = true
+		end
 	end
+	self.last_tech = tech_name
 end
 
 function Momentum:request_jump()
-	self.jump_requested = true
+	self.jump_buffer = JUMP_BUFFER_TIME
 end
 
 function Momentum:set_propulsion(force)
@@ -106,6 +117,9 @@ function Momentum:set_propulsion(force)
 end
 
 function Momentum:update(dt, input, player, world_query)
+	self.jump_buffer = math.max(0, self.jump_buffer - dt)
+	self.jump_requested = self.jump_buffer > 0
+	self.coyote_timer = math.max(0, self.coyote_timer - dt)
 	local move = input.move or 0 -- -1/0/1
 	local strafe = input.strafe or 0
 	local crouch = input.crouch or false
@@ -167,14 +181,16 @@ function Momentum:update(dt, input, player, world_query)
 	-- apply chain bonus
 	local effective_vx = self.vx * self.chain_bonus
 	local effective_vy = self.vy * self.chain_bonus
-	-- normalize if grounded and no chain (matches original capped behavior)
-	if self.grounded and not self.sliding and self.chain_bonus <= 1.0 then
+	-- gradual decel when grounded and no chain (preserves speed across transitions)
+	if self.grounded and not self.sliding then
 		local nx, ny, length = util.normalize(effective_vx, effective_vy)
 		if length > 0 then
 			local cap = math.max(move_speed, strafe_speed)
-			if length > cap then
-				effective_vx = nx * cap
-				effective_vy = ny * cap
+			if self.chain_bonus <= 1.0 and length > cap then
+				local decay_rate = 3.0 -- gradual decel instead of hard cap
+				local new_length = length - (length - cap) * math.min(1, decay_rate * dt)
+				effective_vx = nx * new_length
+				effective_vy = ny * new_length
 			end
 		end
 	end
@@ -187,9 +203,11 @@ function Momentum:_update_chain(dt)
 	if self.chain_timer > 0 then
 		self.chain_timer = self.chain_timer - dt
 		if self.chain_timer <= 0 then
-			self.chain_bonus = 1.0
 			self.chain_timer = 0
 		end
+	end
+	if self.chain_timer <= 0 and self.chain_bonus > 1.0 then
+		self.chain_bonus = math.max(1.0, self.chain_bonus - dt * 1.5) -- gradual decay
 	end
 end
 
@@ -226,6 +244,7 @@ function Momentum:_update_air(dt)
 			self.airborne = false
 			self.grounded = true
 			self.air_time = 0
+			self.coyote_timer = COYOTE_TIME
 			if self.jump_requested then
 				-- bhop: jump pressed near landing
 				local time_to_land = self.air_time + dt -- how close to landing
@@ -233,6 +252,8 @@ function Momentum:_update_air(dt)
 					self:_do_jump()
 					self:notify_tech("bhop")
 					self.stats.bhops = self.stats.bhops + 1
+					self.jump_buffer = 0
+					self.jump_requested = false
 				end
 			end
 			if self.wall_running then
@@ -243,7 +264,17 @@ function Momentum:_update_air(dt)
 	end
 	if self.jump_requested and not self.airborne then
 		self:_do_jump()
+		self.jump_buffer = 0
 		self.jump_requested = false
+		return
+	end
+	-- coyote time: allow jump shortly after landing even if bhop window missed
+	if not self.airborne and self.jump_requested and self.coyote_timer > 0 then
+		self:_do_jump()
+		self:notify_tech("bhop")
+		self.jump_buffer = 0
+		self.jump_requested = false
+		self.coyote_timer = 0
 		return
 	end
 	self.jump_requested = false
@@ -321,6 +352,8 @@ function Momentum:reset()
 	self.slide_time = 0
 	self.airborne = false
 	self.air_time = 0
+	self.jump_buffer = 0
+	self.coyote_timer = 0
 	self.wall_running = false
 	self.wall_run_time = 0
 	self.wall_run_side = nil
@@ -328,6 +361,8 @@ function Momentum:reset()
 	self.chain_timer = 0
 	self.technique = "none"
 	self.propulsion_force = 0
+	self.last_tech = nil
+	self.chain_milestone = false
 end
 
 return Momentum

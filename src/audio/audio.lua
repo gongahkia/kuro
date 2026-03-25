@@ -11,6 +11,9 @@ function Audio.new(settings)
 		music_source = nil,
 		listener = { x = 0, y = 0, angle = 0 },
 		loaded = false,
+		wind_source = nil,
+		wind_volume = 0,
+		wind_target = 0,
 	}, Audio)
 end
 
@@ -86,10 +89,31 @@ end
 function Audio:stop_all()
 	if self.ambient_source then self.ambient_source:stop() end
 	if self.music_source then self.music_source:stop() end
+	if self.wind_source then self.wind_source:stop() end
 end
 
 function Audio:update(_dt)
 	-- future: fade logic, positional source updates
+end
+
+function Audio:update_wind(dt, speed)
+	if not self.loaded then return end
+	if speed > 6 then
+		self.wind_target = util.clamp((speed - 6) / 8, 0, 0.4) * (self.settings.master_volume or 0.7)
+	else
+		self.wind_target = 0
+	end
+	self.wind_volume = self.wind_volume + (self.wind_target - self.wind_volume) * math.min(1, 4.0 * dt)
+	if not self.wind_source and self.sources["wind_loop"] then
+		local entry = self.sources["wind_loop"]
+		self.wind_source = entry.source:clone()
+		self.wind_source:setLooping(true)
+		self.wind_source:setVolume(0)
+		self.wind_source:play()
+	end
+	if self.wind_source then
+		self.wind_source:setVolume(util.clamp(self.wind_volume, 0, 1))
+	end
 end
 
 return Audio

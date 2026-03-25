@@ -256,6 +256,36 @@ local function mark_path_ceiling(meta, path, ceiling)
 	end
 end
 
+local function mark_breakable_walls(meta, rng, rooms)
+	meta.breakable_walls = {}
+	local candidates = {}
+	for y = 2, meta.height - 1 do
+		for x = 2, meta.width - 1 do
+			local cell = meta.cells[y][x]
+			if not cell.walkable then
+				local adjacent_walkable = 0
+				local adj_cells = {{x-1,y},{x+1,y},{x,y-1},{x,y+1}}
+				for _, ac in ipairs(adj_cells) do
+					if meta.cells[ac[2]] and meta.cells[ac[2]][ac[1]] and meta.cells[ac[2]][ac[1]].walkable then
+						adjacent_walkable = adjacent_walkable + 1
+					end
+				end
+				if adjacent_walkable >= 2 then -- wall between two walkable areas
+					candidates[#candidates + 1] = { x = x, y = y }
+				end
+			end
+		end
+	end
+	local count = math.floor(#candidates * 0.18)
+	for i = 1, math.min(count, #candidates) do
+		local idx = rng:int(1, #candidates)
+		local c = candidates[idx]
+		meta.breakable_walls[#meta.breakable_walls + 1] = { x = c.x, y = c.y, broken = false }
+		meta.cells[c.y][c.x].tags.breakable = true
+		table.remove(candidates, idx)
+	end
+end
+
 local function add_path_zone(meta, path, kind)
 	meta.sanityZones = meta.sanityZones or { safe = {}, dark = {}, cursed = {} }
 	local tag = kind .. "_zone"
@@ -893,6 +923,7 @@ local function build_standard_floor(config, rng, options)
 		end
 	end
 
+	mark_breakable_walls(meta, rng)
 	return World.build(meta)
 end
 
@@ -1012,6 +1043,7 @@ local function build_boss_floor(config, rng, options)
 	reserved[ration_cell.x .. ":" .. ration_cell.y] = true
 	add_consumable_pickup(meta, reserved, hall, rng)
 
+	mark_breakable_walls(meta, rng)
 	return World.build(meta)
 end
 

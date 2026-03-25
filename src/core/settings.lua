@@ -77,7 +77,10 @@ function Settings.default()
 			pulse_light = true,
 			death_animations = true,
 		footstep_bob = true,
+		hitstop = true,
 		title_flicker = true,
+		speed_lines = true,
+		runner_show_style = true,
 		master_volume = 0.7,
 		sfx_volume = 1.0,
 		ambient_volume = 0.8,
@@ -107,6 +110,11 @@ function Settings.default()
 			total_victories = 0,
 			total_burns = 0,
 			damageless_floor2 = false,
+			assist_game_speed = 1.0,
+			assist_input_buffer_mult = 1.0,
+			assist_sanity_drain_mult = 1.0,
+			assist_enemy_highlight = false,
+			assist_infinite_light = false,
 		}
 end
 

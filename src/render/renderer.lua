@@ -69,6 +69,9 @@ end
 function Renderer.new(settings)
 	local r = setmetatable({
 		fov = math.rad(78),
+		base_fov = math.rad(78),
+		max_fov = math.rad(95),
+		fov_lerp_speed = 8.0,
 		near = 0.05,
 		max_depth = 32,
 		hud = HUD.new(settings),
@@ -389,9 +392,16 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 	end
 end
 
+function Renderer:update_fov(dt, speed)
+	local t = util.clamp(speed / 10.0, 0, 1)
+	local target = self.base_fov + (self.max_fov - self.base_fov) * t
+	self.fov = self.fov + (target - self.fov) * math.min(1, self.fov_lerp_speed * dt)
+end
+
 -- renderAutomap, renderFX, renderHUD extracted to src/render/hud.lua
 
 function Renderer:draw(run_state)
+	self:update_fov(love.timer.getDelta(), run_state.momentum and run_state.momentum:get_speed() or 0)
 	self.floor_num = run_state.floor or 1
 	self.time = love.timer.getTime()
 	self:renderWorld(run_state.camera, run_state.world, run_state)
@@ -452,7 +462,7 @@ function Renderer:draw(run_state)
 				x = enemy.x,
 				y = enemy.y,
 				scale = enemy.kind == "umbra" and 1.2 or 0.85,
-				ignore_los = run_state.player.blacklight == true,
+				ignore_los = run_state.player.blacklight == true or (run_state.assist and run_state.assist.enemy_highlight),
 				occluded_alpha = 0.35,
 				active = true,
 				anim = Sprites.get_anim(enemy),

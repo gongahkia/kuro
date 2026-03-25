@@ -50,4 +50,27 @@ function Difficulty.build(name, floor, mutators)
 	}
 end
 
+Difficulty.assist_defaults = {
+	game_speed = 1.0,
+	input_buffer_mult = 1.0,
+	sanity_drain_mult = 1.0,
+	enemy_highlight = false,
+	infinite_light = false,
+}
+
+function Difficulty.apply_assist(profile, assist)
+	if not assist then return profile end
+	profile.game_speed = assist.game_speed or 1.0
+	profile.input_buffer_mult = assist.input_buffer_mult or 1.0
+	profile.sanity_drain_mult = assist.sanity_drain_mult or 1.0
+	profile.enemy_highlight = assist.enemy_highlight or false
+	profile.infinite_light = assist.infinite_light or false
+	profile.assist_active = (assist.game_speed or 1.0) < 1.0
+		or (assist.input_buffer_mult or 1.0) > 1.0
+		or (assist.sanity_drain_mult or 1.0) < 1.0
+		or assist.enemy_highlight == true
+		or assist.infinite_light == true
+	return profile
+end
+
 return Difficulty

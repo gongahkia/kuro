@@ -19,6 +19,7 @@ local Consumables = require("src.data.consumables")
 local Challenges = require("src.game.challenges")
 local Sprint = require("src.game.sprint")
 local Momentum = require("src.game.momentum")
+local Style = require("src.game.style")
 
 local Renderer
 
@@ -86,6 +87,18 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		flame_color = options.flame_color or "amber",
 		replay_mode = options.replay_mode == true,
 		settings = settings or {},
+		assist = {
+			game_speed = (settings or {}).assist_game_speed or 1.0,
+			input_buffer_mult = (settings or {}).assist_input_buffer_mult or 1.0,
+			sanity_drain_mult = (settings or {}).assist_sanity_drain_mult or 1.0,
+			enemy_highlight = (settings or {}).assist_enemy_highlight or false,
+			infinite_light = (settings or {}).assist_infinite_light or false,
+		},
+		assist_active = ((settings or {}).assist_game_speed or 1.0) < 1.0
+			or ((settings or {}).assist_input_buffer_mult or 1.0) > 1.0
+			or ((settings or {}).assist_sanity_drain_mult or 1.0) < 1.0
+			or (settings or {}).assist_enemy_highlight == true
+			or (settings or {}).assist_infinite_light == true,
 		category = options.category or "any",
 		category_key = options.category_key,
 		events = Events.new(),
@@ -141,6 +154,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		},
 		completed = false,
 		momentum = Momentum.new(),
+		style = Style.new(),
 		player = {
 			x = 0,
 			y = 0,
@@ -244,8 +258,12 @@ function Run.new(difficulty, seed, mutators, settings, options)
 	end)
 	self.events:on("enemy_killed", function(e)
 		self.fx:trigger_death_anim(0, 0, e.enemy.kind)
+		self.fx:trigger_hitstop(0.05) -- ~3 frames at 60fps
 		self.codex:record_enemy(e.enemy.kind)
 		self.audio:play("enemy_death", { x = e.enemy.x, y = e.enemy.y })
+	end)
+	self.events:on("enemy_hit", function(e)
+		self.audio:play("enemy_death", { x = e.enemy.x, y = e.enemy.y, volume = 0.3, pitch = 1.3 })
 	end)
 	self.events:on("player_moved", function(e) self.is_moving = e.moving end)
 	self.events:on("floor_loaded", function(e)
@@ -257,6 +275,12 @@ function Run.new(difficulty, seed, mutators, settings, options)
 	end)
 	self.events:on("pickup_collected", function(e)
 		if e.pickup.kind == "torch" then self.audio:play("pickup_torch") end
+	end)
+	self.events:on("tech_performed", function(e)
+		if e.tech == "slide" then self.audio:play("slide_whoosh", { volume = 0.5 })
+		elseif e.tech == "bhop" then self.audio:play("bhop_thump", { volume = 0.4 })
+		elseif e.tech == "wall_run" then self.audio:play("wall_scrape", { volume = 0.4 })
+		end
 	end)
 	if self.loadout == "scout" then
 		self.player.flares = self.player.flares + 2
@@ -1154,6 +1178,20 @@ function Run:update_player(dt)
 		return self:query_nearest_wall(px, py, fx, fy)
 	end
 	local vx, vy = self.momentum:update(dt, momentum_input, self.player, wall_query)
+	if self.momentum.last_tech then
+		local tech = self.momentum.last_tech
+		if tech == "slide_jump" or tech == "bhop" then
+			self.audio:play("bhop_thump", { volume = 0.4 })
+		elseif tech == "wall_kick_bhop" then
+			self.audio:play("wall_scrape", { volume = 0.4 })
+		end
+		self.style:notify_tech(tech, self.clock)
+		if self.momentum.chain_milestone then
+			self.audio:play("chain_milestone", { volume = 0.6, pitch = 0.8 + self.momentum.chain_bonus * 0.3 })
+			self.momentum.chain_milestone = false
+		end
+		self.momentum.last_tech = nil
+	end
 
 	self:attempt_axis(self.player.x + vx * dt, self.player.y)
 	self:attempt_axis(self.player.x, self.player.y + vy * dt)
@@ -1251,6 +1289,12 @@ function Run:handle_enemy_death(enemy)
 	self.stats.enemies_burned = self.stats.enemies_burned + 1
 	self:drop_enemy_loot(enemy)
 	self.events:emit("enemy_killed", { enemy = enemy })
+	self.momentum.chain_timer = self.momentum.chain_timer + 0.5 -- extend chain on kill
+	if self.momentum.chain_bonus < 1.05 then -- small chain start on kill
+		self.momentum.chain_bonus = 1.08
+		self.momentum.chain_timer = 1.5
+	end
+	self.player.burst_charge = math.min(1.5, self.player.burst_charge + 0.2) -- partial burst refund
 	if enemy.modifier then
 		local EnemyData = require("src.data.enemies")
 		local mod = EnemyData.modifiers[enemy.modifier]
@@ -1586,6 +1630,13 @@ function Run:try_burn_dash(charge)
 	self.player.dash_feedback_time = 0.5
 	self.stats.burn_dashes = self.stats.burn_dashes + 1
 	self.momentum:notify_tech("burn_dash_bhop")
+	local check_x = self.player.x + dir_x * 1.5
+	local check_y = self.player.y + dir_y * 1.5
+	local cx, cy = World.world_to_cell(check_x, check_y)
+	if World.break_wall(self.world, cx, cy) then
+		self:push_message("[crash] the wall crumbles from the force.")
+		self.fx:trigger_shake(0.5, 0.25)
+	end
 	self:push_message("[dash] the burst hurls you forward.")
 	return true
 end
@@ -1623,6 +1674,11 @@ function Run:release_burst()
 					if enemy.kind == "leech" then
 						enemy.retreat_time = 1.6
 					end
+					if enemy.health > 0 then
+						self.fx:trigger_hit_flash(0, 0)
+						self.fx:trigger_micro_shake()
+					end
+					self.events:emit("enemy_hit", { enemy = enemy })
 					if enemy.health <= 0 then
 						self:handle_enemy_death(enemy)
 					end
@@ -1684,6 +1740,9 @@ function Run:throw_flare()
 end
 
 function Run:use_light(dt)
+	if self.assist and self.assist.infinite_light then -- assist mode: skip light consumption
+		self.player.light_charge = self.player.max_light_charge
+	end
 	self.player.fire_cooldown = math.max(0, self.player.fire_cooldown - dt)
 	local fire_allowed = self.category ~= "pacifist"
 	local propulsion_mode = self.keys.f and self.keys.s -- backward + fire = propulsion
@@ -1704,6 +1763,11 @@ function Run:use_light(dt)
 					if enemy.kind == "leech" then
 						enemy.retreat_time = 1.1
 					end
+					if enemy.health > 0 then
+						self.fx:trigger_hit_flash(0, 0)
+						self.fx:trigger_micro_shake()
+					end
+					self.events:emit("enemy_hit", { enemy = enemy })
 					if enemy.health <= 0 then
 						self:handle_enemy_death(enemy)
 						self:push_message(enemy.kind .. " burned away.")
@@ -1787,7 +1851,7 @@ function Run:update_sanity(dt)
 		in_dark_zone = tags.dark_zone == true or self.boss.fog_active == true,
 		in_cursed_zone = tags.cursed_zone == true,
 		enemy_pressure = self:get_enemy_pressure(),
-		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0) * (dark_lane and dark_lane.drain_mult or (tags.dark_lane and 1.2 or 1.0)),
+		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0) * (dark_lane and dark_lane.drain_mult or (tags.dark_lane and 1.2 or 1.0)) * (self.assist and self.assist.sanity_drain_mult or 1.0),
 	})
 	self.sanity_status = status
 end
@@ -1963,6 +2027,12 @@ end
 
 function Run:update(dt)
 	if self.paused then return nil end
+	dt = dt * (self.assist and self.assist.game_speed or 1.0) -- assist mode: game speed scaling
+	self.fx:update(dt)
+	if self.fx:is_frozen() then -- hitstop: freeze physics, keep audio
+		self.audio:update(dt)
+		return nil
+	end
 	local timer_active = (not self.timer_armed) or self.timer_started
 	if timer_active then
 		self.clock = self.clock + dt
@@ -1988,7 +2058,7 @@ function Run:update(dt)
 	end
 	if self.keys.r then
 		self.restart_hold_time = self.restart_hold_time + dt
-		if self.settings.runner_restart_confirmation ~= false and self.restart_hold_time >= 0.55 then
+		if self.settings.runner_restart_confirmation ~= false and self.restart_hold_time >= 0.35 then
 			self.restart_requested = true
 			self.restart_reason = "hold_restart"
 		end
@@ -1999,7 +2069,6 @@ function Run:update(dt)
 	if not timer_active then
 		self.audio:set_listener(self.player.x, self.player.y, self.player.angle)
 		self.audio:update(dt)
-		self.fx:update(dt)
 		return nil
 	end
 
@@ -2029,7 +2098,9 @@ function Run:update(dt)
 	self:reveal_nearby()
 	self.audio:set_listener(self.player.x, self.player.y, self.player.angle)
 	self.audio:update(dt)
-	self.fx:update(dt)
+	self.audio:update_wind(dt, self.momentum:get_speed())
+	self.fx:update_speed_lines(dt, self.momentum:get_speed())
+	self.style:update(dt, self.clock)
 
 	if self.player.health <= 0 then
 		return "dead"
@@ -2042,6 +2113,10 @@ function Run:update(dt)
 				self:record_split("boss_kill", "Boss Kill", self.floor)
 			end
 			self:record_split("run_finish", "Run Finish", self.floor)
+			if self.mode == "sprint" and self.sprint_ruleset == "official" then
+				local entry = Sprint.export_leaderboard_entry(self)
+				Sprint.save_leaderboard_entry(entry)
+			end
 			self.finish_splits_recorded = true
 		end
 		return "victory"

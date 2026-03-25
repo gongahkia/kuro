@@ -14,12 +14,81 @@ function FX.new(settings)
 		bob_phase = 0,
 		bob_amplitude = 0.012,
 		kill_flashes = {},
+		hit_flashes = {},
 		death_particles = {},
 		low_charge_phase = 0,
+		speed_lines = {},
+		speed_line_timer = 0,
+		hitstop_time = 0,
 	}, FX)
 end
 
+function FX:update_speed_lines(dt, speed)
+	if not self.settings.speed_lines then return end
+	if not love then return end
+	local width, height = love.graphics.getDimensions()
+	for i = #self.speed_lines, 1, -1 do -- decay existing
+		local line = self.speed_lines[i]
+		line.ttl = line.ttl - dt
+		line.x = line.x + line.dx * dt
+		if line.ttl <= 0 then table.remove(self.speed_lines, i) end
+	end
+	if speed > 6.0 then -- spawn new lines
+		self.speed_line_timer = self.speed_line_timer + dt
+		local interval = 1.0 / (2 + (speed - 6) * 0.8) -- faster = more frequent
+		while self.speed_line_timer >= interval do
+			self.speed_line_timer = self.speed_line_timer - interval
+			local from_right = math.random() > 0.5
+			local line = {
+				x = from_right and width or 0,
+				y = math.random() * height,
+				dx = from_right and -(200 + speed * 30) or (200 + speed * 30),
+				length = 30 + math.random() * 40,
+				alpha = util.clamp((speed - 6) / 8, 0.1, 0.6),
+				ttl = 0.15 + math.random() * 0.15,
+			}
+			self.speed_lines[#self.speed_lines + 1] = line
+		end
+	else
+		self.speed_line_timer = 0
+	end
+end
+
+function FX:draw_speed_lines()
+	if not self.settings.speed_lines then return end
+	if not love then return end
+	local lg = love.graphics
+	for _, line in ipairs(self.speed_lines) do
+		lg.setColor(1, 1, 1, line.alpha * util.clamp(line.ttl / 0.15, 0, 1))
+		local ex = line.x + (line.dx > 0 and line.length or -line.length)
+		lg.line(line.x, line.y, ex, line.y)
+	end
+	if #self.speed_lines > 0 then -- vignette overlay at speed
+		local width, height = lg.getDimensions()
+		local strength = util.clamp(#self.speed_lines / 20, 0, 0.25)
+		lg.setColor(0, 0, 0, strength)
+		lg.rectangle("fill", 0, 0, width, height * 0.08) -- top edge
+		lg.rectangle("fill", 0, height * 0.92, width, height * 0.08) -- bottom edge
+		lg.rectangle("fill", 0, 0, width * 0.05, height) -- left edge
+		lg.rectangle("fill", width * 0.95, 0, width * 0.05, height) -- right edge
+	end
+end
+
+function FX:trigger_hitstop(duration)
+	if not self.settings.hitstop then return end
+	self.hitstop_time = math.max(self.hitstop_time, duration)
+end
+
+function FX:is_frozen()
+	return self.hitstop_time > 0
+end
+
 function FX:update(dt)
+	if self.hitstop_time > 0 then -- hitstop freeze
+		self.hitstop_time = self.hitstop_time - dt
+		if self.hitstop_time < 0 then self.hitstop_time = 0 end
+		return
+	end
 	if self.shake_time > 0 then -- screen shake decay
 		self.shake_time = self.shake_time - dt
 		local t = math.max(0, self.shake_time)
@@ -37,6 +106,11 @@ function FX:update(dt)
 		flash.ttl = flash.ttl - dt
 		if flash.ttl <= 0 then table.remove(self.kill_flashes, i) end
 	end
+	for i = #self.hit_flashes, 1, -1 do -- hit flash decay
+		local flash = self.hit_flashes[i]
+		flash.ttl = flash.ttl - dt
+		if flash.ttl <= 0 then table.remove(self.hit_flashes, i) end
+	end
 	for i = #self.death_particles, 1, -1 do -- death anim decay
 		local p = self.death_particles[i]
 		p.elapsed = p.elapsed + dt
@@ -53,6 +127,15 @@ end
 function FX:trigger_kill_flash(screen_x, screen_y)
 	if not self.settings.flash_on_kill then return end
 	self.kill_flashes[#self.kill_flashes + 1] = { x = screen_x, y = screen_y, ttl = 0.15, radius = 28 }
+end
+
+function FX:trigger_hit_flash(screen_x, screen_y)
+	if not self.settings.flash_on_kill then return end -- reuse same setting
+	self.hit_flashes[#self.hit_flashes + 1] = { x = screen_x, y = screen_y, ttl = 0.08, radius = 14 }
+end
+
+function FX:trigger_micro_shake()
+	self:trigger_shake(0.1, 0.05)
 end
 
 function FX:trigger_death_anim(screen_x, screen_y, kind)
@@ -117,6 +200,11 @@ function FX:draw_particles()
 		local alpha = util.clamp(flash.ttl / 0.15, 0, 0.6)
 		lg.setColor(1, 1, 1, alpha)
 		lg.circle("fill", flash.x, flash.y, flash.radius * (1 - flash.ttl / 0.15))
+	end
+	for _, flash in ipairs(self.hit_flashes) do -- hit flash (smaller, dimmer)
+		local alpha = util.clamp(flash.ttl / 0.08, 0, 0.35)
+		lg.setColor(1, 1, 1, alpha)
+		lg.circle("fill", flash.x, flash.y, flash.radius * (1 - flash.ttl / 0.08))
 	end
 	for _, group in ipairs(self.death_particles) do
 		local t = group.elapsed / group.duration

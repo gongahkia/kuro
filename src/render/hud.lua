@@ -183,7 +183,7 @@ function HUD:draw_automap(run_state, lg)
 	lg.setColor(0.95, 0.95, 0.98)
 	lg.circle("fill", px, py, math.max(2, cell_size * 0.24))
 	lg.line(px, py, px + facing_x * 8, py + facing_y * 8)
-	if run_state.player.blacklight or (run_state.relics and run_state.relics:has_effect("automap_enemies")) then
+	if run_state.player.blacklight or (run_state.relics and run_state.relics:has_effect("automap_enemies")) or (run_state.assist and run_state.assist.enemy_highlight) then
 		for _, enemy in ipairs(run_state.world.enemies) do
 			if enemy.alive ~= false then
 				local ex, ey = World.world_to_cell(enemy.x, enemy.y)
@@ -233,6 +233,7 @@ function HUD:draw(run_state, lg)
 	if run_state.fx then
 		run_state.fx:draw_particles()
 		run_state.fx:draw_low_charge_pulse(player.light_charge, player.max_light_charge)
+		run_state.fx:draw_speed_lines()
 	end
 	self:draw_crosshair(lg)
 	lg.setColor(0.92, 0.94, 0.97)
@@ -355,6 +356,10 @@ function HUD:draw(run_state, lg)
 		lg.print("Descent timer active", 230, 34)
 	end
 	lg.print(run_state.objective_text or "", 16, height - 86)
+	if run_state.assist_active then
+		lg.setColor(0.72, 0.5, 0.95)
+		lg.print("[ASSIST]", 16, height - 106)
+	end
 	self:draw_bars(player, lg, run_state.flame_color)
 	self:draw_sanity_bar(run_state.sanity, lg)
 	self:draw_consumables(player, lg)
@@ -369,6 +374,7 @@ function HUD:draw(run_state, lg)
 		lg.print(string.format("Guide %.0f deg", math.deg(delta)), width - 180, height - 34)
 	end
 	self:draw_velocity(run_state, lg)
+	self:draw_style_meter(run_state, lg)
 	self:draw_input_display(run_state, lg)
 	self:draw_automap(run_state, lg)
 	if run_state.bonfire_screen then
@@ -417,6 +423,24 @@ function HUD:draw_velocity(run_state, lg)
 			lg.print(tech, width - 140, 30)
 		end
 	end
+end
+
+function HUD:draw_style_meter(run_state, lg)
+	if not run_state.style then return end
+	if run_state.settings and run_state.settings.runner_show_style == false then return end
+	local width = lg.getDimensions()
+	local rank = run_state.style:get_rank()
+	local score = run_state.style:get_score()
+	local flash = run_state.style:get_flash()
+	local colors = { D = {0.5,0.5,0.5}, C = {0.6,0.8,0.6}, B = {0.4,0.9,0.9}, A = {0.9,0.8,0.3}, S = {1.0,0.6,0.2}, SS = {1.0,0.3,0.3} }
+	local color = colors[rank] or colors.D
+	local alpha = 0.9 + flash * 0.4
+	lg.setColor(color[1], color[2], color[3], alpha)
+	lg.print(rank, width - 80, 50)
+	lg.setColor(0.15, 0.15, 0.18, 0.6)
+	lg.rectangle("fill", width - 140, 70, 80, 6)
+	lg.setColor(color[1], color[2], color[3], 0.8)
+	lg.rectangle("fill", width - 140, 70, 80 * (score / 100), 6)
 end
 
 function HUD:draw_input_display(run_state, lg)
@@ -566,6 +590,68 @@ function HUD:pause_keypressed(key)
 	elseif key == "o" then self:toggle_setting("runner_input_display")
 	elseif key == "p" then self:toggle_setting("runner_show_ghost_3d")
 	end
+end
+
+function HUD:draw_results(run_state, lg)
+	local width, height = lg.getDimensions()
+	lg.setColor(0, 0, 0, 0.85)
+	lg.rectangle("fill", 0, 0, width, height)
+	local outcome = run_state.player.health <= 0 and "DEFEATED" or "VICTORY"
+	lg.setColor(run_state.player.health <= 0 and {0.95, 0.3, 0.25} or {0.95, 0.85, 0.35})
+	lg.printf(outcome, 0, height * 0.06, width, "center")
+	lg.setColor(0.82, 0.84, 0.88)
+	local y = height * 0.14
+	lg.printf(string.format("Time: %s    Floor: %d/%d    Difficulty: %s",
+		format_time(run_state.clock), run_state.floor, run_state.total_floors, run_state.difficulty_label), 0, y, width, "center")
+	y = y + 30
+	if run_state.splits and #run_state.splits > 0 then -- splits breakdown
+		lg.setColor(0.72, 0.76, 0.82)
+		lg.printf("-- SPLITS --", 0, y, width, "center")
+		y = y + 22
+		for _, split in ipairs(run_state.splits) do
+			local delta_str = split.delta and string.format("  %+.2fs", split.delta) or ""
+			local gold_mark = split.gold and " *" or ""
+			local color = (split.delta and split.delta <= 0) and {0.42, 0.95, 0.42} or {0.95, 0.42, 0.42}
+			if not split.delta then color = {0.72, 0.76, 0.82} end
+			lg.setColor(color)
+			lg.printf(string.format("%-20s  %s%s%s", split.label, format_time(split.time), delta_str, gold_mark), width * 0.2, y, width * 0.6, "left")
+			y = y + 18
+		end
+		y = y + 10
+	end
+	lg.setColor(0.72, 0.76, 0.82) -- stats
+	lg.printf("-- STATS --", 0, y, width, "center")
+	y = y + 22
+	local stats = run_state.stats or {}
+	local lines = {
+		string.format("Enemies burned: %d", stats.enemies_burned or 0),
+		string.format("Damage taken: %d", stats.damage_taken or 0),
+		string.format("Torches: %d    Flares: %d    Burn dashes: %d", stats.torches_collected or 0, stats.flares_used or 0, stats.burn_dashes or 0),
+		string.format("Secrets: %d    Encounters: %d", stats.secrets_revealed or 0, stats.encounters_triggered or 0),
+	}
+	lg.setColor(0.82, 0.84, 0.88)
+	for _, line in ipairs(lines) do
+		lg.printf(line, 0, y, width, "center")
+		y = y + 18
+	end
+	if run_state.momentum then -- momentum stats
+		y = y + 10
+		lg.setColor(0.72, 0.76, 0.82)
+		lg.printf("-- MOVEMENT --", 0, y, width, "center")
+		y = y + 22
+		local ms = run_state.momentum.stats or {}
+		lg.setColor(0.82, 0.84, 0.88)
+		lg.printf(string.format("Slides: %d    Bhops: %d    Wall runs: %d    Chains: %d",
+			ms.slides or 0, ms.bhops or 0, ms.wall_runs or 0, ms.chains or 0), 0, y, width, "center")
+		y = y + 18
+	end
+	if run_state.style then -- style rank
+		local rank = run_state.style:get_rank()
+		lg.setColor(0.95, 0.85, 0.35)
+		lg.printf(string.format("Style rank: %s", rank), 0, y + 10, width, "center")
+	end
+	lg.setColor(0.5, 0.5, 0.55) -- controls
+	lg.printf("[R] Restart    [V] Save Replay    [Esc] Menu", 0, height * 0.92, width, "center")
 end
 
 function HUD:toggle_setting(key)

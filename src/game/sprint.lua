@@ -941,44 +941,68 @@ function Sprint.update_practice_record(records, summary)
 	return records, current
 end
 
-function Sprint.export_leaderboard_entry(summary, record)
-	if not summary then return nil end
-	local splits = {}
-	for _, s in ipairs(summary.splits or {}) do
-		splits[#splits + 1] = { id = s.id, time = s.time }
-	end
+function Sprint.export_leaderboard_entry(run_state)
 	local entry = {
-		category_key = summary.category_key or "",
-		category = summary.category or "any",
-		time = summary.duration or 0,
-		splits = splits,
-		medal = record and record.medal or nil,
-		seed = summary.seed,
-		difficulty = summary.difficulty_id or summary.difficulty_key or "",
-		pack_id = summary.sprint_seed_pack_id or "",
-		seed_id = summary.sprint_seed_id or "",
-		build_id = summary.build_id or "",
-		date = summary.recording_date or os.date("%Y-%m-%d"),
-		replay_hash = summary.replay_hash or "",
+		version = "1.0",
+		timestamp = os.time(),
+		seed = run_state.seed,
+		difficulty = run_state.difficulty,
+		mode = run_state.mode,
+		clock = run_state.clock,
+		category = run_state.category or "any",
+		pack_id = run_state.sprint_seed_pack_id,
+		seed_id = run_state.sprint_seed_id,
+		splits = {},
+		stats = {
+			enemies_burned = run_state.stats.enemies_burned or 0,
+			damage_taken = run_state.stats.damage_taken or 0,
+			burn_dashes = run_state.stats.burn_dashes or 0,
+			flare_boosts = run_state.stats.flare_boosts or 0,
+		},
+		momentum = run_state.momentum and {
+			slides = run_state.momentum.stats.slides or 0,
+			bhops = run_state.momentum.stats.bhops or 0,
+			wall_runs = run_state.momentum.stats.wall_runs or 0,
+			chains = run_state.momentum.stats.chains or 0,
+		} or nil,
+		assist_active = run_state.assist_active or false,
 	}
+	for _, split in ipairs(run_state.splits or {}) do
+		entry.splits[#entry.splits + 1] = {
+			id = split.id,
+			label = split.label,
+			time = split.time,
+			delta = split.delta,
+			gold = split.gold,
+		}
+	end
+	return entry
+end
+
+function Sprint.save_leaderboard_entry(entry)
+	if not (love and love.filesystem) then return false end
+	local json = Sprint._serialize_json(entry)
+	local filename = string.format("leaderboard/%s_%s_%d.json", entry.difficulty or "unknown", entry.seed_id or "unknown", entry.timestamp or 0)
+	love.filesystem.createDirectory("leaderboard")
+	return love.filesystem.write(filename, json)
+end
+
+function Sprint._serialize_json(value)
+	if type(value) == "nil" then return "null" end
+	if type(value) == "boolean" then return value and "true" or "false" end
+	if type(value) == "number" then return tostring(value) end
+	if type(value) == "string" then return string.format("%q", value) end
+	if type(value) ~= "table" then return "null" end
+	local is_array = #value > 0
+	if is_array then
+		local parts = {}
+		for _, v in ipairs(value) do parts[#parts + 1] = Sprint._serialize_json(v) end
+		return "[" .. table.concat(parts, ",") .. "]"
+	end
 	local parts = {}
-	for k, v in pairs(entry) do
-		if type(v) == "table" then
-			local items = {}
-			for _, item in ipairs(v) do
-				if type(item) == "table" then
-					local sub = {}
-					for sk, sv in pairs(item) do
-						sub[#sub + 1] = string.format('"%s":%s', sk, type(sv) == "string" and string.format('"%s"', sv) or tostring(sv))
-					end
-					items[#items + 1] = "{" .. table.concat(sub, ",") .. "}"
-				end
-			end
-			parts[#parts + 1] = string.format('"%s":[%s]', k, table.concat(items, ","))
-		elseif type(v) == "string" then
-			parts[#parts + 1] = string.format('"%s":"%s"', k, v)
-		else
-			parts[#parts + 1] = string.format('"%s":%s', k, tostring(v))
+	for k, v in pairs(value) do
+		if type(k) == "string" then
+			parts[#parts + 1] = string.format("%q:%s", k, Sprint._serialize_json(v))
 		end
 	end
 	return "{" .. table.concat(parts, ",") .. "}"
