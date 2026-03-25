@@ -18,6 +18,12 @@ local flame_palette = {
 	blue = { 0.46, 0.72, 0.98 },
 }
 
+local function format_time(seconds)
+	local minutes = math.floor((seconds or 0) / 60)
+	local secs = (seconds or 0) - minutes * 60
+	return string.format("%02d:%05.2f", minutes, secs)
+end
+
 function HUD.new(settings)
 	return setmetatable({
 		settings = settings or {},
@@ -152,6 +158,19 @@ function HUD:draw_automap(run_state, lg)
 		lg.setColor(palette.flare)
 		lg.circle("fill", fx, fy, math.max(2, cell_size * 0.22))
 	end
+	if run_state.settings.runner_ghost_visible ~= false and run_state.ghost_compare and run_state.ghost_compare.breadcrumbs then
+		lg.setColor(0.42, 0.84, 1.0, 0.55)
+		for _, frame in ipairs(run_state.ghost_compare.breadcrumbs) do
+			local gx, gy = World.world_to_cell(frame.x, frame.y)
+			lg.circle("fill", panel_x + (gx - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (gy - 1) * cell_size + cell_size * 0.5 + 8, math.max(1, cell_size * 0.10))
+		end
+		local marker = run_state.ghost_compare.marker
+		if marker and marker.floor == run_state.floor then
+			local gx, gy = World.world_to_cell(marker.x, marker.y)
+			lg.setColor(0.76, 0.94, 1.0, 0.95)
+			lg.circle("line", panel_x + (gx - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (gy - 1) * cell_size + cell_size * 0.5 + 8, math.max(2, cell_size * 0.24))
+		end
+	end
 	local player_cell_x, player_cell_y = World.world_to_cell(run_state.player.x, run_state.player.y)
 	local px = panel_x + (player_cell_x - 1) * cell_size + cell_size * 0.5 + 8
 	local py = panel_y + (player_cell_y - 1) * cell_size + cell_size * 0.5 + 8
@@ -227,14 +246,36 @@ function HUD:draw(run_state, lg)
 		lg.setColor(0.5, 0.7, 0.9)
 		lg.print("[crouching]", 230, 12)
 	end
+	lg.setColor(0.92, 0.94, 0.97)
+	lg.print("Time " .. format_time(run_state.clock or 0), 230, 12)
 	if run_state.mode == "time_attack" then
-		local minutes = math.floor((run_state.time_attack_elapsed or 0) / 60)
-		local seconds = math.floor((run_state.time_attack_elapsed or 0) % 60)
 		lg.setColor(0.95, 0.8, 0.28)
-		lg.print(string.format("Timer %02d:%02d  Lvl %d", minutes, seconds, run_state.time_attack_level or 0), 230, 34)
+		lg.print(string.format("Pressure Lvl %d", run_state.time_attack_level or 0), 230, 34)
 	elseif run_state.mode == "daily" and run_state.daily_label then
 		lg.setColor(0.66, 0.82, 0.96)
 		lg.print("Daily " .. run_state.daily_label, 230, 34)
+	elseif run_state.mode == "sprint" then
+		lg.setColor(0.94, 0.88, 0.42)
+		lg.print(string.format("Sprint %s", run_state.sprint_ruleset == "practice" and "Practice" or "Official"), 230, 34)
+		if run_state.settings.runner_show_split_delta ~= false then
+			local delta = run_state.last_split_delta
+			if delta then
+				lg.setColor(delta <= 0 and 0.42 or 0.95, delta <= 0 and 0.95 or 0.42, 0.42)
+			else
+				lg.setColor(0.82, 0.84, 0.88)
+			end
+			lg.print(delta and string.format("Split %+0.2fs", delta) or "Split --", 230, 54)
+		end
+		if run_state.settings.runner_show_medal_pace ~= false then
+			local pace = run_state:get_medal_pace()
+			if pace then
+				lg.setColor(0.7, 0.86, 1.0)
+				lg.print(string.format("Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 74)
+			end
+		end
+	else
+		lg.setColor(0.82, 0.84, 0.88)
+		lg.print("Descent timer active", 230, 34)
 	end
 	lg.print(run_state.objective_text or "", 16, height - 86)
 	self:draw_bars(player, lg, run_state.flame_color)
@@ -278,12 +319,14 @@ function HUD:draw_pause(run_state, lg)
 			string.format("Torches collected: %d", stats.torches_collected),
 			string.format("Enemies burned: %d", stats.enemies_burned),
 			string.format("Encounters triggered: %d", stats.encounters_triggered),
-			string.format("Anchors lit: %d", stats.anchors_lit),
-			string.format("Flares used: %d", stats.flares_used),
-			string.format("Consumables used: %d", stats.consumables_used or 0),
-			string.format("Wards triggered: %d", stats.wards_triggered or 0),
-			string.format("Secrets revealed: %d", stats.secrets_revealed or 0),
-		}
+				string.format("Anchors lit: %d", stats.anchors_lit),
+				string.format("Flares used: %d", stats.flares_used),
+				string.format("Consumables used: %d", stats.consumables_used or 0),
+				string.format("Wards triggered: %d", stats.wards_triggered or 0),
+				string.format("Secrets revealed: %d", stats.secrets_revealed or 0),
+				string.format("Burn dashes: %d", stats.burn_dashes or 0),
+				string.format("Flare boosts: %d", stats.flare_boosts or 0),
+			}
 		for _, line in ipairs(lines) do
 			lg.print(line, width * 0.3, content_y)
 			content_y = content_y + 22
@@ -310,15 +353,27 @@ function HUD:draw_pause(run_state, lg)
 		end
 	elseif self.pause_tab == 4 then -- settings
 		lg.setColor(0.82, 0.84, 0.88)
-		local toggles = { "screen_shake", "flash_on_kill", "pulse_light", "death_animations", "footstep_bob", "title_flicker" }
-		for i, key in ipairs(toggles) do
-			local val = self.settings[key]
-			lg.print(string.format("[%s] %s: %s", string.char(96 + i), key, val and "ON" or "OFF"), width * 0.3, content_y)
-			content_y = content_y + 22
+			local toggles = {
+				"screen_shake",
+				"flash_on_kill",
+				"pulse_light",
+				"death_animations",
+				"footstep_bob",
+				"title_flicker",
+				"runner_ghost_visible",
+				"runner_auto_save_pb_replay",
+				"runner_restart_confirmation",
+				"runner_show_medal_pace",
+				"runner_show_split_delta",
+			}
+			for i, key in ipairs(toggles) do
+				local val = self.settings[key]
+				lg.print(string.format("[%s] %s: %s", string.char(96 + i), key, val and "ON" or "OFF"), width * 0.3, content_y)
+				content_y = content_y + 22
+			end
 		end
-	end
-	lg.setColor(0.5, 0.5, 0.55)
-	lg.printf("[Esc] Resume  [1-4] Tab  [V] Save Replay", 0, height * 0.88, width, "center")
+		lg.setColor(0.5, 0.5, 0.55)
+		lg.printf("[Esc] Resume  [R] Restart  [1-4] Tab  [V] Save Replay", 0, height * 0.88, width, "center")
 end
 
 function HUD:pause_keypressed(key)
@@ -332,6 +387,11 @@ function HUD:pause_keypressed(key)
 	elseif key == "d" then self:toggle_setting("death_animations")
 	elseif key == "e" then self:toggle_setting("footstep_bob")
 	elseif key == "f" then self:toggle_setting("title_flicker")
+	elseif key == "g" then self:toggle_setting("runner_ghost_visible")
+	elseif key == "h" then self:toggle_setting("runner_auto_save_pb_replay")
+	elseif key == "i" then self:toggle_setting("runner_restart_confirmation")
+	elseif key == "j" then self:toggle_setting("runner_show_medal_pace")
+	elseif key == "k" then self:toggle_setting("runner_show_split_delta")
 	end
 end
 
