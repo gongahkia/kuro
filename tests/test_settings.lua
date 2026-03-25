@@ -18,4 +18,33 @@ return {
 		a.screen_shake = false
 		assert(b.screen_shake == true, "expected independent copy")
 	end,
+	["settings save and load nested tables"] = function()
+		local original_love = _G.love
+		local stored = nil
+		_G.love = {
+			filesystem = {
+				getInfo = function(path)
+					return path == "settings.lua" and stored and { type = "file" } or nil
+				end,
+				load = function(path)
+					assert(path == "settings.lua", "unexpected settings path")
+					return load(stored)
+				end,
+				write = function(path, contents)
+					assert(path == "settings.lua", "unexpected settings write path")
+					stored = contents
+					return true
+				end,
+			},
+		}
+
+		local settings = Settings.default()
+		settings.meta_unlocks.mutator_ironman = true
+		settings.time_attack_records.stalker = 91.5
+		assert(Settings.save(settings), "expected settings save")
+		local loaded = Settings.load()
+		assert(loaded.meta_unlocks.mutator_ironman == true, "expected nested unlock persistence")
+		assert(loaded.time_attack_records.stalker == 91.5, "expected nested record persistence")
+		_G.love = original_love
+	end,
 }
