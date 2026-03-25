@@ -40,6 +40,9 @@ local function new_replay_data(seed, difficulty)
 			timer_start_reason = "",
 			practice_target = "",
 			best_possible_time = 0,
+			pb_pack_version = "",
+			pack_version_mismatch = false,
+			mixed_split_versions = false,
 			replay_file = "",
 			tech_usage = {},
 			route_events = {},
@@ -136,6 +139,44 @@ local function sanitize_filename(value)
 	return tostring(value or "replay"):gsub("[^%w%-_]+", "_")
 end
 
+local function resolve_timer_value(timer_value)
+	if type(timer_value) == "number" then
+		return timer_value
+	end
+	if love and love.timer and love.timer.getTime then
+		return love.timer.getTime()
+	end
+	return os.clock()
+end
+
+local function timestamp_base(timer_value)
+	local raw = resolve_timer_value(timer_value)
+	local seconds = math.floor(raw)
+	local millis = math.floor(math.max(0, raw - seconds) * 1000 + 0.5)
+	return os.date("%Y%m%d_%H%M%S", seconds > 0 and seconds or os.time()) .. string.format("_%03d", millis)
+end
+
+local function unique_basename(directory, prefix, category_key, timer_value, extensions)
+	local fs = get_filesystem()
+	fs.create_directory(directory)
+	local base = string.format("%s%s_%s", prefix or "", sanitize_filename(category_key or "sprint_export"), timestamp_base(timer_value))
+	local candidate = base
+	local suffix = 2
+	local function taken(name)
+		for _, ext in ipairs(extensions or { "" }) do
+			if fs.exists(directory .. "/" .. name .. ext) then
+				return true
+			end
+		end
+		return false
+	end
+	while taken(candidate) do
+		candidate = string.format("%s_%d", base, suffix)
+		suffix = suffix + 1
+	end
+	return candidate
+end
+
 local function json_escape(value)
 	return tostring(value or ""):gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n")
 end
@@ -205,7 +246,7 @@ local function serialize(data)
 		"DURATION:" .. tostring(metadata.duration or 0),
 		"TOTAL_INPUTS:" .. tostring(metadata.total_inputs or #data.inputs),
 	}
-	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal", "build_id", "pack_version", "timer_start_reason", "practice_target", "best_possible_time", "replay_file" }) do
+	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal", "build_id", "pack_version", "timer_start_reason", "practice_target", "best_possible_time", "pb_pack_version", "pack_version_mismatch", "mixed_split_versions", "replay_file" }) do
 		lines[#lines + 1] = string.format("META:%s=%s", key, tostring(metadata[key] or ""))
 	end
 	serialize_path(lines, "", data.context or {}, "CONTEXT")
@@ -455,6 +496,9 @@ function Replay.set_summary(summary)
 	replay_data.metadata.timer_start_reason = summary.timer_start_reason or replay_data.metadata.timer_start_reason
 	replay_data.metadata.practice_target = summary.practice_target or replay_data.metadata.practice_target
 	replay_data.metadata.best_possible_time = summary.best_possible_time or replay_data.metadata.best_possible_time
+	replay_data.metadata.pb_pack_version = summary.pb_pack_version or replay_data.metadata.pb_pack_version
+	replay_data.metadata.pack_version_mismatch = summary.pack_version_mismatch == true
+	replay_data.metadata.mixed_split_versions = summary.mixed_split_versions == true
 	replay_data.metadata.tech_usage = deep_copy(summary.tech_usage or {})
 	replay_data.metadata.route_events = deep_copy(summary.route_events or {})
 	replay_data.metadata.gold_splits = deep_copy(summary.gold_splits or {})
@@ -506,7 +550,7 @@ function Replay.pb_filename(category_key)
 end
 
 function Replay.result_filename(category_key, timer_value)
-	return string.format("run_%s_%s.txt", sanitize_filename(category_key or "sprint_finish"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
+	return unique_basename(REPLAY_DIR, "run_", category_key or "sprint_finish", timer_value, { ".txt" }) .. ".txt"
 end
 
 function Replay.load(filename)
@@ -632,7 +676,7 @@ function Replay.write_json(relative_path, value)
 end
 
 function Replay.export_basename(category_key, timer_value)
-	return string.format("%s_%s", sanitize_filename(category_key or "sprint_export"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
+	return unique_basename(EXPORT_DIR, "", category_key or "sprint_export", timer_value, { ".txt", ".json" })
 end
 
 function Replay.export_filename(category_key, timer_value)
