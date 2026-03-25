@@ -2095,7 +2095,7 @@ function Run:keypressed(key)
 	elseif key == "escape" then
 		self.paused = true
 		self.renderer.hud.paused = true
-	elseif key == "r" and self.settings.runner_restart_confirmation == false then
+	elseif key == "r" and (self.settings.runner_restart_confirmation == false or self.mode == "sprint") then
 		self.restart_requested = true
 		self.restart_reason = "tap_restart"
 	end
