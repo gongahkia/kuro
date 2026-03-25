@@ -25,9 +25,20 @@ local palette = {
 	flare = { 1.0, 0.96, 0.55, 1.0 },
 	ration = { 0.72, 0.58, 0.36, 1.0 },
 	relic = { 0.95, 0.82, 0.45, 1.0 },
+	calming_tonic = { 0.54, 0.92, 0.74, 1.0 },
+	speed_tonic = { 0.95, 0.74, 0.24, 1.0 },
+	ward_charge = { 0.72, 0.84, 1.0, 1.0 },
 	note = { 0.85, 0.82, 0.72, 1.0 },
 	corpse = { 0.35, 0.32, 0.30, 1.0 },
 	blood_trail = { 0.55, 0.12, 0.10, 1.0 },
+	pillar = { 0.66, 0.64, 0.58, 1.0 },
+	blacklight = { 0.58, 0.72, 1.0, 0.42 },
+}
+
+local flame_palette = {
+	amber = { 0.92, 0.74, 0.24, 1.0 },
+	red = { 0.94, 0.38, 0.28, 1.0 },
+	blue = { 0.46, 0.72, 0.98, 1.0 },
 }
 
 local function shade(color, distance, gloom)
@@ -180,12 +191,26 @@ function Renderer:renderWorld(camera, world, run_state)
 	local lg = love.graphics
 	local width, height = lg.getDimensions()
 	local gloom = run_state.blackout_time > 0 and 1.0 or 0.0
-	lg.setColor(palette.sky)
+	local floor_color = palette.floor
+	local sky_color = palette.sky
+	local current_sector = World.get_sector_at(world, camera.x, camera.y)
+	if current_sector and current_sector.tags then
+		if current_sector.tags.safe_zone then
+			floor_color = { 0.08, 0.09, 0.07, 1.0 }
+			sky_color = { 0.05, 0.07, 0.06, 1.0 }
+		elseif current_sector.tags.dark_zone then
+			floor_color = { 0.03, 0.03, 0.04, 1.0 }
+		elseif current_sector.tags.cursed_zone then
+			floor_color = { 0.1, 0.04, 0.04, 1.0 }
+			sky_color = { 0.07, 0.03, 0.04, 1.0 }
+		end
+	end
+	lg.setColor(sky_color)
 	lg.rectangle("fill", 0, 0, width, height * 0.5)
-	lg.setColor(palette.floor)
+	lg.setColor(floor_color)
 	lg.rectangle("fill", 0, height * 0.5, width, height * 0.5)
 
-	local sector = World.get_sector_at(world, camera.x, camera.y)
+	local sector = current_sector
 	if sector then
 		self:render_sector(camera, world, sector.id, 0, width, {}, gloom, 0)
 	end
@@ -201,11 +226,13 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 	for _, entity in ipairs(entities) do
 		if entity.active ~= false then
 			local screen_x, depth_x = self:transform(camera, entity.x, entity.y)
-			if depth_x > self.near and World.has_line_of_sight(world, camera.x, camera.y, entity.x, entity.y) then
+			local has_los = depth_x > self.near and World.has_line_of_sight(world, camera.x, camera.y, entity.x, entity.y)
+			if depth_x > self.near and (has_los or entity.ignore_los) then
 				sprites[#sprites + 1] = {
 					entity = entity,
 					camera_x = screen_x,
 					depth = depth_x,
+					occluded = not has_los,
 				}
 			end
 		end
@@ -221,8 +248,14 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 		local screen_x = width * 0.5 + (sprite.camera_x / sprite.depth) * projection
 		local bottom = horizon + (camera.height / sprite.depth) * projection
 		local top = bottom - size * 1.4
-		local color = palette[entity.kind] or palette.stalker
+		local color = sprite.occluded and palette.blacklight or (palette[entity.kind] or palette.stalker)
+		if not sprite.occluded and (entity.kind == "flare" or entity.kind == "anchor_lit") then
+			color = flame_palette[run_state.flame_color or "amber"] or flame_palette.amber
+		end
 		local r, g, b, a = shade(color, sprite.depth, run_state.blackout_time > 0 and 0.75 or 0.0)
+		if sprite.occluded then
+			a = a * (entity.occluded_alpha or 0.4)
+		end
 		lg.setColor(r, g, b, a)
 		lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
 		lg.setColor(1, 1, 1, 0.12)
@@ -291,6 +324,19 @@ function Renderer:draw(run_state)
 				x = enemy.x,
 				y = enemy.y,
 				scale = enemy.kind == "umbra" and 1.2 or 0.85,
+				ignore_los = run_state.player.blacklight == true,
+				occluded_alpha = 0.35,
+				active = true,
+			}
+		end
+	end
+	for _, pillar in ipairs(run_state.world.pillars or {}) do
+		if not pillar.destroyed then
+			sprite_entities[#sprite_entities + 1] = {
+				kind = "pillar",
+				x = pillar.x,
+				y = pillar.y,
+				scale = 0.65,
 				active = true,
 			}
 		end
