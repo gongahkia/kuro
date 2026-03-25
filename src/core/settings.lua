@@ -71,27 +71,37 @@ local function serialize_value(value, indent)
 end
 
 function Settings.default()
-	return {
-		screen_shake = true,
-		flash_on_kill = true,
-		pulse_light = true,
-		death_animations = true,
+		return {
+			screen_shake = true,
+			flash_on_kill = true,
+			pulse_light = true,
+			death_animations = true,
 		footstep_bob = true,
 		title_flicker = true,
 		master_volume = 0.7,
 		sfx_volume = 1.0,
 		ambient_volume = 0.8,
-		meta_unlocks = {},
-		selected_mode = "classic",
-		selected_loadout = "default",
-		selected_flame_color = "amber",
-		daily_records = {},
-		time_attack_records = {},
-		total_runs = 0,
-		total_victories = 0,
-		total_burns = 0,
-		damageless_floor2 = false,
-	}
+			meta_unlocks = {},
+			selected_mode = "classic",
+			selected_loadout = "default",
+			selected_flame_color = "amber",
+			selected_sprint_ruleset = "official",
+			selected_sprint_pack_id = "black_flame_circuit",
+			selected_sprint_seed_id = "ember_arc",
+			selected_sprint_practice_floor = 1,
+			daily_records = {},
+			time_attack_records = {},
+			sprint_records = {},
+			runner_ghost_visible = true,
+			runner_auto_save_pb_replay = true,
+			runner_restart_confirmation = true,
+			runner_show_medal_pace = true,
+			runner_show_split_delta = true,
+			total_runs = 0,
+			total_victories = 0,
+			total_burns = 0,
+			damageless_floor2 = false,
+		}
 end
 
 function Settings.load()
