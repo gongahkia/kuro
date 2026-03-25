@@ -77,7 +77,8 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		sprint_ruleset = options.sprint_ruleset,
 		sprint_seed_pack_id = options.sprint_seed_pack_id,
 		sprint_seed_id = options.sprint_seed_id,
-		practice_floor = options.practice_floor or 1,
+		pack_version = options.pack_version or Sprint.get_pack_version(options.sprint_seed_pack_id),
+		practice_target = options.practice_target,
 		start_floor = options.start_floor or 1,
 		official_record_eligible = options.official_record_eligible == true,
 		loadout = options.loadout or "default",
@@ -89,6 +90,9 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		total_floors = 3,
 		floor = 1,
 		clock = 0,
+		timer_started = not (mode == "sprint" and options.sprint_ruleset == "official"),
+		timer_armed = mode == "sprint" and options.sprint_ruleset == "official",
+		timer_start_reason = mode == "sprint" and options.sprint_ruleset == "official" and "armed" or "immediate",
 		rng = RNG.new(seed + 4049),
 		keys = {},
 		pending_interact = false,
@@ -177,6 +181,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			last_split_delta = nil,
 			pb_total_time = options.pb_total_time,
 			pb_splits = util.deepcopy(options.pb_splits or {}),
+			best_possible_time = options.best_possible_time,
 			ghost_compare = {
 				frames = util.deepcopy((options.ghost_compare and options.ghost_compare.frames) or {}),
 				marker = nil,
@@ -184,6 +189,16 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			},
 			medal_targets = util.deepcopy(options.medal_targets or {}),
 			finish_splits_recorded = false,
+			practice_goal = nil,
+			practice_target_label = nil,
+			route_events = {
+				minimum_torch_pickups = 0,
+				dark_lane_entries = 0,
+				flare_line_boosts = 0,
+				burn_lane_dashes = 0,
+				pillar_route_breaks = 0,
+			},
+			route_cells_seen = {},
 		}, Run)
 
 	self.fx = FX.new(self.settings)
@@ -236,8 +251,10 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		self.player.flares = self.player.flares + 2
 	end
 	self:load_floor(self.start_floor)
-	if self.mode == "sprint" and self.sprint_ruleset == "practice" and self.start_floor > 1 then
-		self:apply_practice_snapshot(self.start_floor)
+	if self.mode == "sprint" and self.sprint_ruleset == "practice" and self.practice_target then
+		self:apply_practice_target(self.practice_target)
+	elseif self.mode == "sprint" and self.sprint_ruleset == "practice" and self.start_floor > 1 then
+		self:apply_practice_target(string.format("floor:%d", self.start_floor))
 	end
 	return self
 end
@@ -246,6 +263,12 @@ function Run:summary()
 	local medal = nil
 	if self.mode == "sprint" and self.sprint_ruleset == "official" then
 		medal = Sprint.evaluate_medal(self.sprint_seed_pack_id, self.sprint_seed_id, self.difficulty, self.clock)
+	end
+	local gold_splits = {}
+	for _, split in ipairs(self.splits) do
+		if split.gold then
+			gold_splits[#gold_splits + 1] = split.id
+		end
 	end
 	return {
 		seed = self.seed,
@@ -258,7 +281,9 @@ function Run:summary()
 		sprint_ruleset = self.sprint_ruleset,
 		sprint_seed_pack_id = self.sprint_seed_pack_id,
 		sprint_seed_id = self.sprint_seed_id,
-		practice_floor = self.practice_floor,
+		pack_version = self.pack_version,
+		practice_target = self.practice_target,
+		practice_target_label = self.practice_target_label,
 		official_record_eligible = self.official_record_eligible,
 		category_key = self.category_key,
 		loadout = self.loadout,
@@ -268,10 +293,14 @@ function Run:summary()
 		stats = util.deepcopy(self.stats),
 		splits = util.deepcopy(self.splits),
 		medal = medal,
+		gold_splits = gold_splits,
+		best_possible_time = self.best_possible_time,
+		timer_start_reason = self.timer_start_reason,
 		tech_usage = {
 			burn_dashes = self.stats.burn_dashes or 0,
 			flare_boosts = self.stats.flare_boosts or 0,
 		},
+		route_events = util.deepcopy(self.route_events),
 	}
 end
 
@@ -282,8 +311,17 @@ function Run:push_message(message)
 	end
 end
 
-function Run:apply_practice_snapshot(floor)
-	local snapshot = Sprint.get_practice_snapshot(self.difficulty, floor)
+function Run:begin_timer(reason)
+	if self.timer_started or not self.timer_armed then
+		return false
+	end
+	self.timer_started = true
+	self.timer_start_reason = reason or "input"
+	self:push_message(string.format("Sprint timer live on %s.", self.timer_start_reason))
+	return true
+end
+
+function Run:apply_practice_snapshot(snapshot, floor)
 	if not snapshot then
 		return
 	end
@@ -300,6 +338,120 @@ function Run:apply_practice_snapshot(floor)
 	self:push_message(string.format("Practice snapshot loaded for floor %d.", floor))
 end
 
+function Run:apply_practice_target(target_id)
+	local target = Sprint.get_practice_target(self.sprint_seed_pack_id, self.sprint_seed_id, target_id, self.difficulty)
+	if not target then
+		return
+	end
+	self.practice_target = target.id
+	self.practice_target_label = target.label
+	self.start_floor = target.floor or self.start_floor
+	self:apply_practice_snapshot(target.snapshot, target.floor or self.floor)
+	if target.kind == "drill" then
+		local route = self.world.routeNodes and self.world.routeNodes[target.route_id] or nil
+		if route and route.start_x and route.start_y then
+			local start_x, start_y = route.start_x, route.start_y
+			if self.world.spawn and route.start and route.finish and route.start.x == self.world.spawn.cell.x and route.start.y == self.world.spawn.cell.y then
+				local path = World.find_path(self.world, route.start, route.finish, true)
+				if path and path[2] then
+					start_x, start_y = World.cell_to_world(path[2])
+				end
+			end
+			self.player.x = start_x
+			self.player.y = start_y
+			if route.finish_x and route.finish_y then
+				self.player.angle = math.atan(route.finish_y - self.player.y, route.finish_x - self.player.x)
+			end
+		end
+		self.practice_goal = {
+			target_id = target.id,
+			label = target.label,
+			kind = target.kind,
+			floor = target.floor,
+			route_id = target.route_id,
+			goal = util.deepcopy(target.goal or {}),
+			start_stats = {
+				burn_dashes = self.stats.burn_dashes or 0,
+				flare_boosts = self.stats.flare_boosts or 0,
+				pillars_destroyed = self.stats.pillars_destroyed or 0,
+				anchors_lit = self.stats.anchors_lit or 0,
+			},
+		}
+		self:push_message(string.format("%s active.", target.label))
+	else
+		self.practice_goal = {
+			target_id = target.id,
+			label = target.label,
+			kind = target.kind,
+			floor = target.floor,
+			goal = { type = "floor_clear", floor = target.floor },
+		}
+	end
+end
+
+function Run:mark_route_entry(tag, cell_x, cell_y)
+	if not tag then
+		return
+	end
+	local key = string.format("%s:%d:%d", tag, cell_x, cell_y)
+	if self.route_cells_seen[key] then
+		return
+	end
+	self.route_cells_seen[key] = true
+	if tag == "dark_lane" then
+		self.route_events.dark_lane_entries = self.route_events.dark_lane_entries + 1
+	end
+end
+
+function Run:update_route_progress()
+	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
+	local tags = World.get_cell_tags(self.world, cell_x, cell_y) or {}
+	if tags.dark_lane then
+		self:mark_route_entry("dark_lane", cell_x, cell_y)
+	end
+end
+
+function Run:get_split_stack()
+	if self.mode ~= "sprint" then
+		return nil
+	end
+	local plan = Sprint.get_split_plan()
+	local last_split = self.splits[#self.splits]
+	local next_split = nil
+	for _, info in ipairs(plan) do
+		if not self.split_index[info.id] then
+			next_split = info
+			break
+		end
+	end
+	local segment_start = last_split and last_split.time or 0
+	local projected_finish, projected_delta = Sprint.projected_finish(self.pb_splits, self.splits, self.clock)
+	return {
+		last = last_split,
+		next = next_split,
+		current_segment_time = math.max(0, self.clock - segment_start),
+		projected_finish = projected_finish,
+		projected_delta = projected_delta,
+		best_possible_time = self.best_possible_time,
+	}
+end
+
+function Run:get_ghost_cue()
+	local marker = self.ghost_compare and self.ghost_compare.marker or nil
+	if not marker or marker.floor ~= self.floor then
+		return nil
+	end
+	local dx = marker.x - self.player.x
+	local dy = marker.y - self.player.y
+	local distance = math.sqrt(dx * dx + dy * dy)
+	local angle_to = math.atan(dy, dx)
+	local delta = ((angle_to - self.player.angle + math.pi) % (math.pi * 2)) - math.pi
+	return {
+		distance = distance,
+		angle_delta = delta,
+	}
+end
+
 function Run:record_split(id, label, floor)
 	if self.split_index[id] then
 		return self.split_index[id]
@@ -313,6 +465,7 @@ function Run:record_split(id, label, floor)
 	for _, other in ipairs(self.pb_splits or {}) do
 		if other.id == id and other.time then
 			split.delta = self.clock - other.time
+			split.gold = self.clock < other.time
 			self.last_split_delta = split.delta
 			break
 		end
@@ -432,8 +585,11 @@ function Run:load_floor(floor)
 	elseif self.mode == "sprint" then
 		if self.sprint_ruleset == "official" then
 			self:push_message("Sprint official: medals, PBs, and ghosts are active.")
+			if self.timer_armed and not self.timer_started then
+				self:push_message("Timer armed. First movement or action starts the run.")
+			end
 		else
-			self:push_message(string.format("Sprint practice floor %d: records disabled.", self.practice_floor or 1))
+			self:push_message(string.format("Sprint practice target: %s.", self.practice_target_label or self.practice_target or ("floor:" .. tostring(self.start_floor))))
 		end
 	end
 	self:record_split(string.format("floor_%d_start", floor), string.format("Floor %d Start", floor), floor)
@@ -481,6 +637,21 @@ function Run:damage_player(amount, reason)
 end
 
 function Run:current_objective_cell()
+	if self.practice_goal and self.practice_goal.kind == "drill" then
+		local goal = self.practice_goal.goal or {}
+		if goal.type == "collect_route_pickup" then
+			for _, pickup in ipairs(self.world.pickups) do
+				if pickup.active and pickup.route_role == goal.route_role then
+					return { x = pickup.cell.x, y = pickup.cell.y }
+				end
+			end
+		end
+		local route = self.practice_goal.route_id and self.world.routeNodes and self.world.routeNodes[self.practice_goal.route_id] or nil
+		if route and route.finish then
+			return { x = route.finish.x, y = route.finish.y }
+		end
+	end
+
 	if self.floor < self.total_floors then
 		local best_pickup
 		local best_distance = math.huge
@@ -605,7 +776,12 @@ function Run:damage_pillar(pillar, amount)
 	pillar.health = pillar.health - amount
 	if pillar.health <= 0 then
 		pillar.destroyed = true
-		self.boss.weakened = (self.boss.weakened or 0) + (self.mode == "sprint" and 1.4 or 1)
+		local weaken_amount = self.mode == "sprint" and 1.4 or 1
+		if pillar.route_role == "pillar_route" then
+			weaken_amount = weaken_amount + (pillar.weaken_bonus or 0.5)
+			self.route_events.pillar_route_breaks = self.route_events.pillar_route_breaks + 1
+		end
+		self.boss.weakened = (self.boss.weakened or 0) + weaken_amount
 		self.stats.pillars_destroyed = self.stats.pillars_destroyed + 1
 		self:push_message("[crash] a pillar collapses and Umbra's rhythm falters.")
 		return true
@@ -798,7 +974,29 @@ function Run:update_player(dt)
 	if self.keys.lshift then
 		self.player.burst_charge = math.min(1.5, self.player.burst_charge + dt)
 	end
+	self:update_route_progress()
 	self.events:emit("player_moved", { x = self.player.x, y = self.player.y, moving = length > 0 or self.player.dash_time > 0 })
+end
+
+function Run:update_practice_goal()
+	if not self.practice_goal or self.completed then
+		return
+	end
+	local goal = self.practice_goal.goal or {}
+	local route = self.practice_goal.route_id and self.world.routeNodes and self.world.routeNodes[self.practice_goal.route_id] or nil
+	if goal.type == "reach_route_end" and route and route.finish then
+		local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
+		if cell_x == route.finish.x and cell_y == route.finish.y then
+			if goal.require == "burn_dash" and (self.stats.burn_dashes or 0) <= (self.practice_goal.start_stats.burn_dashes or 0) then
+				return
+			end
+			if goal.require == "flare_boost" and (self.stats.flare_boosts or 0) <= (self.practice_goal.start_stats.flare_boosts or 0) then
+				return
+			end
+			self.completed = true
+			self:push_message("Drill complete. Route end reached.")
+		end
+	end
 end
 
 function Run:spawn_enemy(kind, origin_cell, modifier)
@@ -968,6 +1166,12 @@ function Run:collect_pickup(pickup)
 		end
 	end
 	if consumed then
+		if pickup.route_role == "minimum_torch" then
+			self.route_events.minimum_torch_pickups = self.route_events.minimum_torch_pickups + 1
+			if self.practice_goal and self.practice_goal.goal and self.practice_goal.goal.type == "collect_route_pickup" and self.practice_goal.goal.route_role == pickup.route_role then
+				self.completed = true
+			end
+		end
 		pickup.active = false
 		self.events:emit("pickup_collected", { pickup = pickup })
 	end
@@ -1022,6 +1226,13 @@ function Run:try_use_anchor(anchor)
 		self:record_split("final_anchor_lit", "Final Anchor Lit", self.floor)
 		self.completed = true
 		self:push_message("Umbra buckles under the light. You survive the abyss.")
+	elseif self.practice_goal and self.practice_goal.goal and self.practice_goal.goal.type == "pillar_anchor" then
+		local required_pillars = self.practice_goal.goal.required_pillars or 1
+		local required_anchors = self.practice_goal.goal.required_anchors or 1
+		if self.stats.pillars_destroyed >= required_pillars and self.stats.anchors_lit >= required_anchors then
+			self.completed = true
+			self:push_message("Drill complete. The route holds.")
+		end
 	end
 end
 
@@ -1090,7 +1301,10 @@ function Run:interact()
 		if self.player.collected_torches >= self.player.torch_goal then
 			self.stats.floors_cleared = self.stats.floors_cleared + 1
 			self:record_split(string.format("floor_%d_clear", self.floor), string.format("Floor %d Clear", self.floor), self.floor)
-			if self.floor < self.total_floors then
+			if self.practice_goal and self.practice_goal.goal and self.practice_goal.goal.type == "floor_clear" and self.practice_goal.goal.floor == self.floor then
+				self.completed = true
+				self:push_message("Practice floor complete.")
+			elseif self.floor < self.total_floors then
 				self:push_message("The stairwell yields to the torchlight.")
 				self:load_floor(self.floor + 1)
 			else
@@ -1138,6 +1352,11 @@ function Run:try_burn_dash(charge)
 	self.player.dash_vx = dir_x * (5.4 + charge * 2.8)
 	self.player.dash_vy = dir_y * (5.4 + charge * 2.8)
 	self.stats.burn_dashes = self.stats.burn_dashes + 1
+	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
+	local tags = World.get_cell_tags(self.world, cell_x, cell_y) or {}
+	if tags.burn_lane then
+		self.route_events.burn_lane_dashes = self.route_events.burn_lane_dashes + 1
+	end
 	self:push_message("[dash] the burst hurls you forward.")
 	return true
 end
@@ -1274,11 +1493,15 @@ function Run:update_flares(dt)
 		flare.ttl = flare.ttl - dt
 		flare.boost_window = math.max(0, (flare.boost_window or 0) - dt)
 		if not flare.boosted and flare.boost_window > 0 and util.distance(self.player.x, self.player.y, flare.x, flare.y) <= 0.78 then
-			flare.boosted = true
-			self.player.speed_boost_time = math.max(self.player.speed_boost_time, 1.25)
-			self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, 1.38)
-			self.stats.flare_boosts = self.stats.flare_boosts + 1
-			self:push_message("[boost] the flare slings you ahead.")
+		flare.boosted = true
+		self.player.speed_boost_time = math.max(self.player.speed_boost_time, 1.25)
+		self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, 1.38)
+		self.stats.flare_boosts = self.stats.flare_boosts + 1
+		local tags = World.get_cell_tags(self.world, flare.cell.x, flare.cell.y) or {}
+		if tags.flare_line then
+			self.route_events.flare_line_boosts = self.route_events.flare_line_boosts + 1
+		end
+		self:push_message("[boost] the flare slings you ahead.")
 		end
 		if flare.ttl <= 0 then
 			table.remove(self.flares, index)
@@ -1318,7 +1541,7 @@ function Run:update_sanity(dt)
 		in_dark_zone = tags.dark_zone == true or self.boss.fog_active == true,
 		in_cursed_zone = tags.cursed_zone == true,
 		enemy_pressure = self:get_enemy_pressure(),
-		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0),
+		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0) * (tags.dark_lane and 1.2 or 1.0),
 	})
 	self.sanity_status = status
 end
@@ -1490,7 +1713,10 @@ end
 
 function Run:update(dt)
 	if self.paused then return nil end
-	self.clock = self.clock + dt
+	local timer_active = (not self.timer_armed) or self.timer_started
+	if timer_active then
+		self.clock = self.clock + dt
+	end
 	self.damage_flash = math.max(0, self.damage_flash - dt)
 	self.blackout_time = math.max(0, self.blackout_time - dt)
 	self.alarm_time = math.max(0, self.alarm_time - dt)
@@ -1511,6 +1737,13 @@ function Run:update(dt)
 		end
 	else
 		self.restart_hold_time = 0
+	end
+
+	if not timer_active then
+		self.audio:set_listener(self.player.x, self.player.y, self.player.angle)
+		self.audio:update(dt)
+		self.fx:update(dt)
+		return nil
 	end
 
 	self:update_time_attack(dt)
@@ -1535,6 +1768,7 @@ function Run:update(dt)
 	end
 
 	self:update_ghost_compare()
+	self:update_practice_goal()
 	self:reveal_nearby()
 	self.audio:set_listener(self.player.x, self.player.y, self.player.angle)
 	self.audio:update(dt)
@@ -1598,6 +1832,17 @@ function Run:keypressed(key)
 		return
 	end
 	self.keys[key] = true
+	if self.timer_armed and not self.timer_started then
+		local timer_reason = nil
+		if key == "w" or key == "a" or key == "s" or key == "d" or key == "q" or key == "e" then
+			timer_reason = "movement"
+		elseif key == "space" or key == "f" or key == "g" or key == "lshift" or key == "rshift" or key == "1" or key == "2" or key == "3" then
+			timer_reason = "action"
+		end
+		if timer_reason then
+			self:begin_timer(timer_reason)
+		end
+	end
 	if key == "space" then
 		self.pending_interact = true
 	elseif key == "1" then
