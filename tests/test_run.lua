@@ -69,4 +69,55 @@ return {
 		run:refresh_secret_clues()
 		assert(run.world.secret_walls[1].revealed == true, "expected lore clue reveal")
 	end,
+
+	["sprint runs record floor splits and category metadata"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			category_key = "sprint:stalker:black_flame_circuit:ember_arc",
+			official_record_eligible = true,
+		})
+		assert(run.splits[1].id == "floor_1_start", "expected first split at floor start")
+		run.player.collected_torches = run.player.torch_goal
+		run.player.inventory_torches = run.player.torch_goal
+		run.player.x = run.world.exit.x
+		run.player.y = run.world.exit.y
+		run:interact()
+		assert(run.split_index.floor_1_clear ~= nil, "expected floor clear split")
+		assert(run.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected sprint category key")
+	end,
+
+	["burn dash and flare boost raise speed tech stats"] = function()
+		local run = Run.new("stalker", 55)
+		run.keys.w = true
+		run.player.burst_charge = 1.0
+		run.player.light_charge = 100
+		run:release_burst()
+		assert(run.stats.burn_dashes == 1, "expected burn dash stat")
+		assert(run.player.dash_time > 0, "expected active dash window")
+
+		run.player.angle = 0
+		run:throw_flare()
+		local flare = run.flares[#run.flares]
+		run.player.x = flare.x
+		run.player.y = flare.y
+		run:update_flares(0.1)
+		assert(run.stats.flare_boosts == 1, "expected flare boost stat")
+		assert(run.player.speed_boost_time > 0, "expected flare boost timer")
+	end,
+
+	["sprint practice starts from floor snapshots"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "practice",
+			practice_floor = 3,
+			start_floor = 3,
+			loadout = "default",
+		})
+		assert(run.floor == 3, "expected direct practice floor start")
+		assert(run.stats.floors_cleared >= 2, "expected prior floors counted for practice")
+		assert(run.player.consumables[1] ~= nil, "expected practice consumable snapshot")
+	end,
 }
