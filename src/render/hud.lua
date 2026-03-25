@@ -1,5 +1,6 @@
 local util = require("src.core.util")
 local World = require("src.world.world")
+local Consumables = require("src.data.consumables")
 
 local HUD = {}
 HUD.__index = HUD
@@ -9,6 +10,12 @@ local palette = {
 	anchor_lit = { 1.0, 0.85, 0.42, 1.0 },
 	exit = { 0.35, 0.75, 0.95, 1.0 },
 	flare = { 1.0, 0.96, 0.55, 1.0 },
+}
+
+local flame_palette = {
+	amber = { 0.92, 0.74, 0.24 },
+	red = { 0.94, 0.38, 0.28 },
+	blue = { 0.46, 0.72, 0.98 },
 }
 
 function HUD.new(settings)
@@ -27,17 +34,18 @@ function HUD:is_paused()
 	return self.paused
 end
 
-function HUD:draw_bars(player, lg)
+function HUD:draw_bars(player, lg, flame_color)
 	local bar_x = 16
 	local bar_y = 100
 	local bar_w = 200
+	local flame = flame_palette[flame_color or "amber"] or flame_palette.amber
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y, bar_w, 12)
 	lg.setColor(0.92, 0.25, 0.22)
 	lg.rectangle("fill", bar_x, bar_y, bar_w * (player.health / player.max_health), 12)
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y + 18, bar_w, 12)
-	lg.setColor(0.92, 0.74, 0.24)
+	lg.setColor(flame[1], flame[2], flame[3])
 	lg.rectangle("fill", bar_x, bar_y + 18, bar_w * (player.light_charge / player.max_light_charge), 12)
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y + 36, bar_w, 10)
@@ -45,21 +53,46 @@ function HUD:draw_bars(player, lg)
 	lg.rectangle("fill", bar_x, bar_y + 36, bar_w * (player.burst_charge / 1.5), 10)
 end
 
-function HUD:draw_survival_bars(hunger, lg)
-	if not hunger then return end
+function HUD:draw_sanity_bar(sanity, lg)
+	if not sanity then return end
+	local status = sanity:get_status()
 	local bar_x = 16
 	local bar_y = 152
 	local bar_w = 140
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y, bar_w, 8)
-	lg.setColor(0.72, 0.52, 0.22)
-	lg.rectangle("fill", bar_x, bar_y, bar_w * hunger:get_hunger_pct(), 8)
-	lg.setColor(0.15, 0.15, 0.18)
-	lg.rectangle("fill", bar_x, bar_y + 12, bar_w, 8)
-	lg.setColor(0.55, 0.35, 0.85)
-	lg.rectangle("fill", bar_x, bar_y + 12, bar_w * hunger:get_sanity_pct(), 8)
+	local color = { 0.46, 0.82, 0.95 }
+	if status.tier == "strained" then
+		color = { 0.95, 0.76, 0.28 }
+	elseif status.tier == "broken" then
+		color = { 0.95, 0.36, 0.36 }
+	end
+	lg.setColor(color)
+	lg.rectangle("fill", bar_x, bar_y, bar_w * (status.sanity / status.max_sanity), 8)
 	lg.setColor(0.5, 0.5, 0.55)
-	lg.print(string.format("Hunger %.0f%%  Sanity %.0f%%", hunger:get_hunger_pct() * 100, hunger:get_sanity_pct() * 100), bar_x, bar_y + 24)
+	lg.print(string.format("Sanity %.0f%%  %s", (status.sanity / status.max_sanity) * 100, status.tier), bar_x, bar_y + 16)
+end
+
+function HUD:draw_consumables(player, lg)
+	local base_x = 16
+	local base_y = 186
+	lg.setColor(0.82, 0.84, 0.88)
+	lg.print("Belt", base_x, base_y)
+	for index = 1, 3 do
+		local kind = player.consumables[index]
+		local label = "---"
+		if kind and Consumables.get(kind) then
+			label = Consumables.get(kind).short_label or kind
+		elseif kind then
+			label = kind
+		end
+		lg.setColor(0.5, 0.5, 0.56)
+		lg.rectangle("line", base_x + 36 + (index - 1) * 70, base_y - 2, 60, 16)
+		lg.setColor(0.82, 0.84, 0.88)
+		lg.print(string.format("%d:%s", index, label), base_x + 40 + (index - 1) * 70, base_y)
+	end
+	lg.setColor(0.55, 0.58, 0.64)
+	lg.print(string.format("Wards %d", player.ward_charges or 0), base_x, base_y + 20)
 end
 
 function HUD:draw_messages(messages, lg, height)
@@ -74,12 +107,14 @@ end
 
 function HUD:draw_automap(run_state, lg)
 	if not run_state.automap_enabled then return end
+	if run_state.sanity and not run_state.sanity:can_show_automap(love.timer.getTime()) then return end
 	local width = lg.getDimensions()
 	local panel_size = 220
 	local panel_x = width - panel_size - 16
 	local panel_y = 16
 	local cell_size = math.floor(panel_size / math.max(run_state.world.width, run_state.world.height))
-	lg.setColor(0.04, 0.05, 0.06, 0.84)
+	local automap_alpha = run_state.sanity and run_state.sanity:get_effects().automap_alpha or 0.84
+	lg.setColor(0.04, 0.05, 0.06, automap_alpha)
 	lg.rectangle("fill", panel_x, panel_y, panel_size, panel_size, 10, 10)
 	for y = 1, run_state.world.height do
 		for x = 1, run_state.world.width do
@@ -125,6 +160,18 @@ function HUD:draw_automap(run_state, lg)
 	lg.setColor(0.95, 0.95, 0.98)
 	lg.circle("fill", px, py, math.max(2, cell_size * 0.24))
 	lg.line(px, py, px + facing_x * 8, py + facing_y * 8)
+	if run_state.player.blacklight or (run_state.relics and run_state.relics:has_effect("automap_enemies")) then
+		for _, enemy in ipairs(run_state.world.enemies) do
+			if enemy.alive ~= false then
+				local ex, ey = World.world_to_cell(enemy.x, enemy.y)
+				local key = string.format("%d:%d", ex, ey)
+				if run_state.revealed[key] then
+					lg.setColor(0.58, 0.72, 1.0, 0.8)
+					lg.circle("fill", panel_x + (ex - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (ey - 1) * cell_size + cell_size * 0.5 + 8, math.max(2, cell_size * 0.16))
+				end
+			end
+		end
+	end
 end
 
 function HUD:draw_overlay_fx(run_state, lg)
@@ -136,6 +183,16 @@ function HUD:draw_overlay_fx(run_state, lg)
 	if run_state.blackout_time > 0 then
 		lg.setColor(0.0, 0.0, 0.0, util.clamp(run_state.blackout_time * 0.28, 0.1, 0.45))
 		lg.rectangle("fill", 0, 0, width, height)
+	end
+	if run_state.sanity then
+		local effects = run_state.sanity:get_effects()
+		if effects.tier == "strained" then
+			lg.setColor(0.28, 0.18, 0.05, 0.08)
+			lg.rectangle("fill", 0, 0, width, height)
+		elseif effects.tier == "broken" then
+			lg.setColor(0.35, 0.05, 0.05, 0.14)
+			lg.rectangle("fill", 0, 0, width, height)
+		end
 	end
 end
 
@@ -156,10 +213,10 @@ function HUD:draw(run_state, lg)
 	end
 	self:draw_crosshair(lg)
 	lg.setColor(0.92, 0.94, 0.97)
-	lg.print(string.format("KURO  Floor %d/%d  %s  Seed %d", run_state.floor, run_state.total_floors, run_state.difficulty_label, run_state.seed), 16, 12)
+	lg.print(string.format("KURO  Floor %d/%d  %s  %s", run_state.floor, run_state.total_floors, run_state.difficulty_label, run_state.mode_label or "Classic"), 16, 12)
 	lg.print(string.format("HP %d/%d", player.health, player.max_health), 16, 34)
 	lg.print(string.format("Torches %d  Goal %d", player.inventory_torches, player.torch_goal), 16, 54)
-	lg.print(string.format("Charge %d%%  Flares %d  Phase %d", math.floor(player.light_charge), player.flares, run_state.boss.phase or 1), 16, 74)
+	lg.print(string.format("Charge %d%%  Flares %d  Seed %d", math.floor(player.light_charge), player.flares, run_state.seed), 16, 74)
 	if run_state.relics and run_state.relics:count() > 0 then
 		local relic_names = {}
 		for _, r in ipairs(run_state.relics:list()) do relic_names[#relic_names + 1] = r.label end
@@ -170,9 +227,19 @@ function HUD:draw(run_state, lg)
 		lg.setColor(0.5, 0.7, 0.9)
 		lg.print("[crouching]", 230, 12)
 	end
+	if run_state.mode == "time_attack" then
+		local minutes = math.floor((run_state.time_attack_elapsed or 0) / 60)
+		local seconds = math.floor((run_state.time_attack_elapsed or 0) % 60)
+		lg.setColor(0.95, 0.8, 0.28)
+		lg.print(string.format("Timer %02d:%02d  Lvl %d", minutes, seconds, run_state.time_attack_level or 0), 230, 34)
+	elseif run_state.mode == "daily" and run_state.daily_label then
+		lg.setColor(0.66, 0.82, 0.96)
+		lg.print("Daily " .. run_state.daily_label, 230, 34)
+	end
 	lg.print(run_state.objective_text or "", 16, height - 86)
-	self:draw_bars(player, lg)
-	self:draw_survival_bars(run_state.hunger, lg)
+	self:draw_bars(player, lg, run_state.flame_color)
+	self:draw_sanity_bar(run_state.sanity, lg)
+	self:draw_consumables(player, lg)
 	self:draw_messages(run_state.messages, lg, height)
 	local objective = run_state:current_objective_cell()
 	if objective then
@@ -213,6 +280,9 @@ function HUD:draw_pause(run_state, lg)
 			string.format("Encounters triggered: %d", stats.encounters_triggered),
 			string.format("Anchors lit: %d", stats.anchors_lit),
 			string.format("Flares used: %d", stats.flares_used),
+			string.format("Consumables used: %d", stats.consumables_used or 0),
+			string.format("Wards triggered: %d", stats.wards_triggered or 0),
+			string.format("Secrets revealed: %d", stats.secrets_revealed or 0),
 		}
 		for _, line in ipairs(lines) do
 			lg.print(line, width * 0.3, content_y)
@@ -248,7 +318,7 @@ function HUD:draw_pause(run_state, lg)
 		end
 	end
 	lg.setColor(0.5, 0.5, 0.55)
-	lg.printf("[Esc] Resume  [1-4] Tab", 0, height * 0.88, width, "center")
+	lg.printf("[Esc] Resume  [1-4] Tab  [V] Save Replay", 0, height * 0.88, width, "center")
 end
 
 function HUD:pause_keypressed(key)
