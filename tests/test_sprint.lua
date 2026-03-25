@@ -3,9 +3,11 @@ local Sprint = require("src.game.sprint")
 return {
 	["sprint packs expose routes and practice targets"] = function()
 		local pack = Sprint.get_pack("black_flame_circuit")
-		assert(pack.version == "1.0.0", "expected pack version")
+		assert(pack.version == "1.1.0", "expected pack version")
 		local manifest = Sprint.get_route_manifest("black_flame_circuit", "ember_arc", 1)
-		assert(manifest.minimum_torch_room == 1, "expected authored minimum torch room")
+		assert(manifest.minimum_torch.pickup_room == 1, "expected authored minimum torch room")
+		assert(manifest.flare_line.checkpoint_count == 2, "expected authored flare checkpoints")
+		assert(manifest.burn_lane.gate_count == 2, "expected authored burn gates")
 		local targets = Sprint.list_practice_targets("black_flame_circuit", "ember_arc")
 		assert(#targets >= 7, "expected floor targets plus drills")
 	end,
@@ -69,6 +71,7 @@ return {
 		assert(updated[next_result.category_key].best_splits[1].time == 58, "expected improved split time")
 		assert(updated[next_result.category_key].best_time == 190, "expected pb total to remain unchanged")
 		assert(updated[next_result.category_key].best_possible_time ~= nil, "expected best possible time")
+		assert(type(updated[next_result.category_key].projected_saves) == "table", "expected projected save table")
 	end,
 
 	["practice records track drill bests locally"] = function()
