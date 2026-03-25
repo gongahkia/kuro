@@ -3,7 +3,7 @@ local Build = require("src.core.build")
 
 local Replay = {}
 
-local FILE_VERSION = "3.0"
+local FILE_VERSION = "3.1"
 local REPLAY_DIR = "replays"
 local EXPORT_DIR = "exports"
 local GHOST_SAMPLE_INTERVAL = 0.25
@@ -39,8 +39,12 @@ local function new_replay_data(seed, difficulty)
 			pack_version = "",
 			timer_start_reason = "",
 			practice_target = "",
+			best_possible_time = 0,
+			replay_file = "",
 			tech_usage = {},
 			route_events = {},
+			gold_splits = {},
+			projected_saves = {},
 		},
 	}
 end
@@ -132,6 +136,54 @@ local function sanitize_filename(value)
 	return tostring(value or "replay"):gsub("[^%w%-_]+", "_")
 end
 
+local function json_escape(value)
+	return tostring(value or ""):gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n")
+end
+
+local function encode_json(value)
+	local value_type = type(value)
+	if value_type == "nil" then
+		return "null"
+	elseif value_type == "number" or value_type == "boolean" then
+		return tostring(value)
+	elseif value_type == "string" then
+		return "\"" .. json_escape(value) .. "\""
+	elseif value_type ~= "table" then
+		return encode_json(tostring(value))
+	end
+
+	local is_array = true
+	local max_index = 0
+	for key in pairs(value) do
+		if type(key) ~= "number" then
+			is_array = false
+			break
+		end
+		max_index = math.max(max_index, key)
+	end
+
+	if is_array then
+		local items = {}
+		for index = 1, max_index do
+			items[#items + 1] = encode_json(value[index])
+		end
+		return "[" .. table.concat(items, ",") .. "]"
+	end
+
+	local keys = {}
+	for key in pairs(value) do
+		keys[#keys + 1] = key
+	end
+	table.sort(keys, function(left, right)
+		return tostring(left) < tostring(right)
+	end)
+	local parts = {}
+	for _, key in ipairs(keys) do
+		parts[#parts + 1] = string.format("%s:%s", encode_json(tostring(key)), encode_json(value[key]))
+	end
+	return "{" .. table.concat(parts, ",") .. "}"
+end
+
 local function serialize_path(lines, prefix, value, header)
 	if type(value) ~= "table" then
 		lines[#lines + 1] = string.format("%s:%s=%s", header, prefix, tostring(value))
@@ -153,12 +205,14 @@ local function serialize(data)
 		"DURATION:" .. tostring(metadata.duration or 0),
 		"TOTAL_INPUTS:" .. tostring(metadata.total_inputs or #data.inputs),
 	}
-	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal", "build_id", "pack_version", "timer_start_reason", "practice_target" }) do
+	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal", "build_id", "pack_version", "timer_start_reason", "practice_target", "best_possible_time", "replay_file" }) do
 		lines[#lines + 1] = string.format("META:%s=%s", key, tostring(metadata[key] or ""))
 	end
 	serialize_path(lines, "", data.context or {}, "CONTEXT")
 	serialize_path(lines, "", metadata.tech_usage or {}, "TECH")
 	serialize_path(lines, "", metadata.route_events or {}, "ROUTE")
+	serialize_path(lines, "", metadata.gold_splits or {}, "GOLD")
+	serialize_path(lines, "", metadata.projected_saves or {}, "SAVE")
 	lines[#lines + 1] = "SPLITS:"
 	for _, split in ipairs(data.splits or {}) do
 		lines[#lines + 1] = string.format("%s|%s|%s|%.4f|%s", split.id or "", split.label or "", tostring(split.floor or ""), split.time or 0, split.delta ~= nil and tostring(split.delta) or "")
@@ -213,7 +267,7 @@ local function deserialize_text(contents)
 		local current = target
 		local parts = {}
 		for part in path:gmatch("[^%.]+") do
-			parts[#parts + 1] = part
+			parts[#parts + 1] = part:match("^%d+$") and tonumber(part) or part
 		end
 		for index = 1, #parts - 1 do
 			local part = parts[index]
@@ -298,6 +352,16 @@ local function deserialize_text(contents)
 					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
 					if path then
 						assign_nested(replay.metadata.route_events, path, raw_value)
+					end
+				elseif key == "GOLD" then
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.metadata.gold_splits, path, raw_value)
+					end
+				elseif key == "SAVE" then
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.metadata.projected_saves, path, raw_value)
 					end
 				end
 			end
@@ -390,8 +454,11 @@ function Replay.set_summary(summary)
 	replay_data.metadata.pack_version = summary.pack_version or replay_data.metadata.pack_version
 	replay_data.metadata.timer_start_reason = summary.timer_start_reason or replay_data.metadata.timer_start_reason
 	replay_data.metadata.practice_target = summary.practice_target or replay_data.metadata.practice_target
+	replay_data.metadata.best_possible_time = summary.best_possible_time or replay_data.metadata.best_possible_time
 	replay_data.metadata.tech_usage = deep_copy(summary.tech_usage or {})
 	replay_data.metadata.route_events = deep_copy(summary.route_events or {})
+	replay_data.metadata.gold_splits = deep_copy(summary.gold_splits or {})
+	replay_data.metadata.projected_saves = deep_copy(summary.projected_saves or {})
 end
 
 function Replay.set_metadata(values)
@@ -403,6 +470,10 @@ function Replay.set_metadata(values)
 			replay_data.metadata.tech_usage = deep_copy(value)
 		elseif key == "route_events" and type(value) == "table" then
 			replay_data.metadata.route_events = deep_copy(value)
+		elseif key == "gold_splits" and type(value) == "table" then
+			replay_data.metadata.gold_splits = deep_copy(value)
+		elseif key == "projected_saves" and type(value) == "table" then
+			replay_data.metadata.projected_saves = deep_copy(value)
 		else
 			replay_data.metadata[key] = value
 		end
@@ -432,6 +503,10 @@ end
 
 function Replay.pb_filename(category_key)
 	return "pb_" .. sanitize_filename(category_key) .. ".txt"
+end
+
+function Replay.result_filename(category_key, timer_value)
+	return string.format("run_%s_%s.txt", sanitize_filename(category_key or "sprint_finish"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
 end
 
 function Replay.load(filename)
@@ -552,8 +627,16 @@ function Replay.write_text(relative_path, contents)
 	return fs.write(relative_path, contents)
 end
 
+function Replay.write_json(relative_path, value)
+	return Replay.write_text(relative_path, encode_json(value) .. "\n")
+end
+
+function Replay.export_basename(category_key, timer_value)
+	return string.format("%s_%s", sanitize_filename(category_key or "sprint_export"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
+end
+
 function Replay.export_filename(category_key, timer_value)
-	return string.format("%s_%s.txt", sanitize_filename(category_key or "sprint_export"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
+	return Replay.export_basename(category_key, timer_value) .. ".txt"
 end
 
 function Replay.get_export_dir()
