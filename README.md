@@ -26,7 +26,7 @@ make test
 - `Enter`: confirm title, menus, and replays
 - `Up`, `Down`: move through title and replay menus
 - `Left`, `Right`: adjust title options
-- `N`: roll a new seed on the title screen
+- `N`: roll a new seed, or advance the selected Sprint seed
 - `Z`, `X`, `C`: toggle `Embers`, `Echoes`, `Onslaught` on the title screen
 - `B`, `I`: toggle unlocked `Blacklight` and `Ironman` mutators on the title screen
 - `W`, `S`: move forward and backward
@@ -39,23 +39,30 @@ make test
 - `1`, `2`, `3`: use consumables from the belt
 - `Tab`: toggle automap
 - `Esc`: pause, resume, or back out of menus
+- Hold `R`: restart the current run from active play
 - `V` or `S`: save a replay from pause or result screens
 - `R`: retry after death or victory
 - `P`: open progression from the result screen
 - `V`: open replay browser from the result screen
+- `1`, `2`, `3` on the result screen: jump into Sprint floor practice
+- `G` on the Sprint result screen: play the current PB replay
 
 ## Modes
 
 - `Classic`: standard seeded descent with selectable loadout, flame color, and mutators
 - `Daily Challenge`: fixed date-seeded `stalker` run with a locked daily profile
 - `Time Attack`: seeded descent with escalating pressure every 30 seconds
+- `Sprint Official`: curated race seeds, split timing, medals, PB records, and ghost comparison
+- `Sprint Practice`: same seed-routing surface with arbitrary seeds or curated seeds, floor starts, and no PB/medal recording
 
 ## Systems
 
 - `Sanity`: the only non-HP pressure track; low sanity distorts vision, weakens automap clarity, and reduces light recovery
 - `Consumable belt`: `Calming Tonic`, `Speed Tonic`, and `Ward Charge` live in 3 quick-use slots
+- `Sprint`: official seed packs, split deltas, medal pace, PB ghosts, and practice floors
 - `Progression`: unlocks opt-in mutators, the `Scout` loadout, and cosmetic flame colors
-- `Replays`: record runs, save them locally, and replay them from the title screen
+- `Replays`: record runs, save them locally, auto-save Sprint PBs, and replay them from the title screen
+- `Speed tech`: `Burn Dash` converts charged burst releases into movement, and `Flare Boost` rewards routing through freshly thrown flares
 
 ## Structure
 
@@ -63,6 +70,7 @@ make test
 - [`main.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/main.lua): Love entrypoint
 - [`src/app.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/app.lua): app state and screen flow
 - [`src/game/run.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/game/run.lua): run orchestration
+- [`src/game/sprint.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/game/sprint.lua): Sprint seed packs, medals, and record helpers
 - [`src/game/sanity.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/game/sanity.lua): sanity pressure model
 - [`src/game/replay.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/game/replay.lua): replay recording and playback
 - [`src/world/generator.lua`](/Users/gongahkia/Desktop/coding/projects/kuro/src/world/generator.lua): deterministic floor generation
