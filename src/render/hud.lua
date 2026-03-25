@@ -292,20 +292,44 @@ function HUD:draw(run_state, lg)
 				lg.print(string.format("Gold Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 174)
 			end
 		end
+		if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+			lg.setColor(0.72, 0.9, 1.0)
+			local warning = run_state.pack_version_mismatch and string.format("Legacy PB %s", run_state.pb_pack_version or "?") or "Mixed split versions"
+			if run_state.pack_version_mismatch and run_state.mixed_split_versions then
+				warning = warning .. "  Mixed splits"
+			end
+			lg.print(warning, 230, 194)
+		end
 		local cue = run_state.get_ghost_cue and run_state:get_ghost_cue() or nil
 		if cue and run_state.settings.runner_ghost_visible ~= false then
 			lg.setColor(0.72, 0.9, 1.0)
 			local heading = math.deg(cue.angle_delta or 0)
 			local direction = math.abs(heading) < 18 and "ahead"
 				or (heading < 0 and "left" or "right")
-			lg.print(string.format("Ghost %.1fm  %s %.0f deg", cue.distance or 0, direction, math.abs(heading)), 230, 194)
+			lg.print(string.format("Ghost %.1fm  %s %.0f deg", cue.distance or 0, direction, math.abs(heading)), 230, (run_state.pack_version_mismatch or run_state.mixed_split_versions) and 214 or 194)
 		end
 		local route = run_state.get_route_indicator and run_state:get_route_indicator() or nil
 		if route then
 			lg.setColor(0.8, 0.96, 0.76)
-			lg.print(string.format("Route %s  %.1fm  %+.0f deg", route.label or route.type or "target", route.distance or 0, math.deg(route.angle_delta or 0)), 230, 214)
+			local route_y = 214
+			if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+				route_y = route_y + 20
+			end
+			if cue and run_state.settings.runner_ghost_visible ~= false then
+				route_y = route_y + 20
+			end
+			lg.print(string.format("Route %s  %.1fm  %+.0f deg", route.label or route.type or "target", route.distance or 0, math.deg(route.angle_delta or 0)), 230, route_y)
 		end
-		local tech_y = route and 234 or 214
+		local tech_y = 214
+		if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+			tech_y = tech_y + 20
+		end
+		if cue and run_state.settings.runner_ghost_visible ~= false then
+			tech_y = tech_y + 20
+		end
+		if route then
+			tech_y = tech_y + 20
+		end
 		lg.setColor(0.96, 0.82, 0.46)
 		local dash_ready = run_state.player.burst_charge >= 0.55 and run_state.player.dash_cooldown <= 0 and run_state.player.light_charge >= 12
 		local dash_text = run_state.player.dash_feedback_time > 0 and "Burn Dash landed"
