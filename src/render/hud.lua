@@ -369,6 +369,7 @@ function HUD:draw(run_state, lg)
 		lg.print(string.format("Guide %.0f deg", math.deg(delta)), width - 180, height - 34)
 	end
 	self:draw_velocity(run_state, lg)
+	self:draw_input_display(run_state, lg)
 	self:draw_automap(run_state, lg)
 end
 
@@ -387,6 +388,44 @@ function HUD:draw_velocity(run_state, lg)
 	if tech ~= "none" then
 		lg.setColor(0.4, 0.95, 0.8)
 		lg.print(tech, width - 140, 30)
+	end
+end
+
+function HUD:draw_input_display(run_state, lg)
+	if not run_state.keys then return end
+	if run_state.settings and run_state.settings.runner_input_display == false then return end
+	local width, height = lg.getDimensions()
+	local base_x = width - 120
+	local base_y = height - 80
+	local size = 18
+	local gap = 2
+	local keys_layout = {
+		{ key = "w", label = "W", col = 1, row = 0 },
+		{ key = "a", label = "A", col = 0, row = 1 },
+		{ key = "s", label = "S", col = 1, row = 1 },
+		{ key = "d", label = "D", col = 2, row = 1 },
+		{ key = "q", label = "Q", col = 0, row = 0 },
+		{ key = "c", label = "C", col = 2, row = 0 },
+		{ key = "space", label = "SP", col = 3.5, row = 1 },
+		{ key = "lshift", label = "SH", col = 3.5, row = 0 },
+		{ key = "lctrl", label = "CT", col = 5, row = 1 },
+		{ key = "f", label = "F", col = 5, row = 0 },
+		{ key = "g", label = "G", col = 6, row = 0 },
+	}
+	for _, k in ipairs(keys_layout) do
+		local x = base_x + k.col * (size + gap)
+		local y = base_y + k.row * (size + gap)
+		local active = run_state.keys[k.key]
+		if active then
+			lg.setColor(0.4, 0.95, 0.8, 0.85)
+			lg.rectangle("fill", x, y, size, size)
+			lg.setColor(0, 0, 0)
+		else
+			lg.setColor(0.3, 0.32, 0.35, 0.5)
+			lg.rectangle("fill", x, y, size, size)
+			lg.setColor(0.6, 0.62, 0.65)
+		end
+		lg.print(k.label, x + 2, y + 2)
 	end
 end
 
