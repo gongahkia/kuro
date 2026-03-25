@@ -1,6 +1,7 @@
 local util = require("src.core.util")
 local RNG = require("src.core.rng")
 local Difficulty = require("src.data.difficulty")
+local Consumables = require("src.data.consumables")
 local World = require("src.world.world")
 
 local Generator = {}
@@ -132,6 +133,51 @@ local function add_door_from_path(meta, path, style)
 	}
 end
 
+local function mark_room_zone(meta, room, kind)
+	meta.sanityZones = meta.sanityZones or { safe = {}, dark = {}, cursed = {} }
+	local tag = kind .. "_zone"
+	local record = {
+		kind = kind,
+		room_id = room.id,
+		center = { x = room.center.x, y = room.center.y },
+		cells = {},
+	}
+	for _, cell in ipairs(room.cells) do
+		if meta.cells[cell.y] and meta.cells[cell.y][cell.x] then
+			meta.cells[cell.y][cell.x].tags[tag] = true
+		end
+		record.cells[#record.cells + 1] = { x = cell.x, y = cell.y }
+	end
+	meta.sanityZones[kind][#meta.sanityZones[kind] + 1] = record
+	return record
+end
+
+local function pick_consumable_kind(rng)
+	local total = 0
+	for _, id in ipairs(Consumables.order) do
+		total = total + (Consumables.defs[id].drop_weight or 1)
+	end
+	local roll = rng:int(1, total)
+	local running = 0
+	for _, id in ipairs(Consumables.order) do
+		running = running + (Consumables.defs[id].drop_weight or 1)
+		if roll <= running then
+			return id
+		end
+	end
+	return Consumables.order[1]
+end
+
+local function add_consumable_pickup(meta, reserved, room, rng)
+	local cell = pick_room_cell(room, rng, reserved)
+	local kind = pick_consumable_kind(rng)
+	meta.pickups[#meta.pickups + 1] = {
+		kind = kind,
+		cell = { x = cell.x, y = cell.y },
+	}
+	reserved[cell.x .. ":" .. cell.y] = true
+end
+
 local function pick_enemy_kind(config, rng)
 	local kinds = {
 		{ kind = "stalker", cost = 1 },
@@ -170,6 +216,7 @@ local function build_standard_floor(config, rng)
 		encounterNodes = {},
 		enemies = {},
 		anchors = {},
+		sanityZones = { safe = {}, dark = {}, cursed = {} },
 	}
 
 	local rooms = {}
@@ -244,6 +291,15 @@ local function build_standard_floor(config, rng)
 		cell = { x = shrine_cell.x, y = shrine_cell.y },
 	}
 	reserved[shrine_cell.x .. ":" .. shrine_cell.y] = true
+	mark_room_zone(meta, shrine_room, "safe")
+
+	local dark_zone_count = math.min(2, math.max(1, config.floor))
+	for index = 2, math.min(#candidate_rooms, 1 + dark_zone_count) do
+		mark_room_zone(meta, candidate_rooms[index], "dark")
+	end
+	if #candidate_rooms >= 3 then
+		mark_room_zone(meta, candidate_rooms[#candidate_rooms], "cursed")
+	end
 
 	for index = 1, config.torch_goal do
 		local room = candidate_rooms[((index + 1) - 1) % #candidate_rooms + 1]
@@ -344,6 +400,12 @@ local function build_standard_floor(config, rng)
 		reserved[cell.x .. ":" .. cell.y] = true
 	end
 
+	local consumable_count = 1 + (config.floor >= 2 and 1 or 0)
+	for index = 1, consumable_count do
+		local room = candidate_rooms[((index + config.torch_goal) - 1) % #candidate_rooms + 1]
+		add_consumable_pickup(meta, reserved, room, rng)
+	end
+
 	-- secret rooms (1-2 per floor, using door system)
 	meta.secret_walls = meta.secret_walls or {}
 	local secret_attempts = rng:int(1, 2)
@@ -396,8 +458,9 @@ local function build_standard_floor(config, rng)
 					secret = true,
 					auto_close = 0,
 				}
+				local secret_kind = rng:chance(0.5) and "relic" or pick_consumable_kind(rng)
 				meta.pickups[#meta.pickups + 1] = {
-					kind = "relic",
+					kind = secret_kind,
 					cell = { x = secret_cell.x, y = secret_cell.y },
 				}
 				meta.secret_walls[#meta.secret_walls + 1] = {
@@ -424,6 +487,7 @@ local function build_boss_floor(config, rng)
 		encounterNodes = {},
 		enemies = {},
 		anchors = {},
+		sanityZones = { safe = {}, dark = {}, cursed = {} },
 	}
 
 	local rooms = {}
@@ -455,6 +519,10 @@ local function build_boss_floor(config, rng)
 	local reserved = {
 		[meta.spawn.cell.x .. ":" .. meta.spawn.cell.y] = true,
 	}
+
+	mark_room_zone(meta, chapel, "safe")
+	mark_room_zone(meta, ante, "cursed")
+	mark_room_zone(meta, boss, "dark")
 
 	local torch_rooms = { north, south, chapel, ante, hall }
 	for index = 1, config.torch_goal do
@@ -515,6 +583,8 @@ local function build_boss_floor(config, rng)
 	-- ration in chapel
 	local ration_cell = pick_room_cell(chapel, rng, reserved)
 	meta.pickups[#meta.pickups + 1] = { kind = "ration", cell = { x = ration_cell.x, y = ration_cell.y } }
+	reserved[ration_cell.x .. ":" .. ration_cell.y] = true
+	add_consumable_pickup(meta, reserved, hall, rng)
 
 	return World.build(meta)
 end
