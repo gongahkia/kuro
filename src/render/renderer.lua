@@ -35,6 +35,11 @@ local palette = {
 	pillar = { 0.66, 0.64, 0.58, 1.0 },
 	blacklight = { 0.58, 0.72, 1.0, 0.42 },
 	sprint_marker = { 0.82, 0.9, 0.42, 1.0 },
+	minimum_marker = { 0.96, 0.92, 0.42, 1.0 },
+	dark_marker = { 0.46, 0.74, 0.98, 1.0 },
+	flare_marker = { 1.0, 0.78, 0.36, 1.0 },
+	burn_marker = { 0.96, 0.44, 0.28, 1.0 },
+	pillar_marker = { 0.82, 0.96, 0.76, 1.0 },
 }
 
 local flame_palette = {
@@ -349,7 +354,8 @@ function Renderer:draw(run_state)
 					kind = deco.kind,
 					x = deco.x,
 					y = deco.y,
-					scale = deco.kind == "corpse" and 0.5 or (deco.kind == "sprint_marker" and 0.42 or 0.3),
+					scale = deco.kind == "corpse" and 0.5
+						or ((deco.kind == "sprint_marker" or deco.kind == "minimum_marker" or deco.kind == "dark_marker" or deco.kind == "flare_marker" or deco.kind == "burn_marker" or deco.kind == "pillar_marker") and 0.42 or 0.3),
 					active = true,
 				}
 			end
