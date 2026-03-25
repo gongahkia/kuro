@@ -371,6 +371,32 @@ function HUD:draw(run_state, lg)
 	self:draw_velocity(run_state, lg)
 	self:draw_input_display(run_state, lg)
 	self:draw_automap(run_state, lg)
+	if run_state.bonfire_screen then
+		self:draw_bonfire(run_state, lg)
+	end
+end
+
+function HUD:draw_bonfire(run_state, lg)
+	local width, height = lg.getDimensions()
+	local bf = run_state.bonfire_screen
+	local alpha = math.min(1.0, bf.timer * 2)
+	lg.setColor(0, 0, 0, 0.65 * alpha)
+	lg.rectangle("fill", 0, 0, width, height)
+	lg.setColor(1.0, 0.75, 0.2, alpha)
+	lg.printf("BONFIRE REST", 0, height * 0.3, width, "center")
+	lg.setColor(0.9, 0.85, 0.7, alpha * 0.9)
+	if bf.restored_hp > 0 then
+		lg.printf(string.format("HP restored +%d    Sanity restored +%d    Light fully recharged", bf.restored_hp, bf.restored_sanity), 0, height * 0.45, width, "center")
+	else
+		lg.printf("The bonfire still burns. Its warmth lingers.", 0, height * 0.45, width, "center")
+	end
+	lg.setColor(0.95, 0.6, 0.15, alpha * (0.5 + 0.5 * math.sin(love.timer.getTime() * 4)))
+	local flame_y = height * 0.55
+	for i = 1, 5 do
+		local fx = width * 0.5 + (i - 3) * 18
+		local fh = 12 + math.sin(love.timer.getTime() * 6 + i) * 6
+		lg.rectangle("fill", fx - 4, flame_y - fh, 8, fh)
+	end
 end
 
 function HUD:draw_velocity(run_state, lg)

@@ -31,9 +31,10 @@ make test
 - `Z`, `X`, `C`: toggle `Embers`, `Echoes`, `Onslaught` on the title screen
 - `B`, `I`: toggle unlocked `Blacklight` and `Ironman` mutators on the title screen
 - `W`, `S`: move forward and backward
-- `A`, `D`: turn left and right
-- `Q`, `E`: strafe
-- `Space`: interact
+- `A`, `D`: strafe left and right
+- `Left`/`Right` or `K`/`L`: turn camera
+- `E`: interact
+- `Space`: jump
 - `F`: emit light
 - `Shift`: charge burst
 - `G`: throw flare

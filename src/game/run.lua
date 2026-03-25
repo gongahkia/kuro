@@ -1518,8 +1518,10 @@ function Run:interact()
 					self.player.health = math.min(self.player.max_health, self.player.health + 2)
 					self.sanity:restore(30)
 					self.player.light_charge = self.player.max_light_charge
+					self.bonfire_screen = { timer = 2.5, restored_hp = 2, restored_sanity = 30 }
 					self:push_message("The bonfire roars to life. You rest a moment.")
 				else
+					self.bonfire_screen = { timer = 1.5, restored_hp = 0, restored_sanity = 0 }
 					self:push_message("The bonfire still burns. Its warmth lingers.")
 				end
 				return
@@ -1967,6 +1969,10 @@ function Run:update(dt)
 	end
 	self.damage_flash = math.max(0, self.damage_flash - dt)
 	self.blackout_time = math.max(0, self.blackout_time - dt)
+	if self.bonfire_screen then
+		self.bonfire_screen.timer = self.bonfire_screen.timer - dt
+		if self.bonfire_screen.timer <= 0 then self.bonfire_screen = nil end
+	end
 	self.alarm_time = math.max(0, self.alarm_time - dt)
 	self.guidance_time = math.max(0, self.guidance_time - dt)
 	self.player.invulnerability_time = math.max(0, self.player.invulnerability_time - dt)
@@ -2092,7 +2098,7 @@ function Run:keypressed(key)
 	self.keys[key] = true
 	if self.timer_armed and not self.timer_started then
 		local timer_reason = nil
-		if key == "w" or key == "a" or key == "s" or key == "d" or key == "q" or key == "c" then
+		if key == "w" or key == "a" or key == "s" or key == "d" or key == "q" or key == "c" or key == "left" or key == "right" or key == "k" or key == "l" then
 			timer_reason = "movement"
 		elseif key == "space" or key == "e" or key == "f" or key == "g" or key == "lshift" or key == "rshift" or key == "1" or key == "2" or key == "3" then
 			timer_reason = "action"
