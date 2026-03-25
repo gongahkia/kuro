@@ -852,6 +852,21 @@ local function build_standard_floor(config, rng, options)
 		end
 	end
 
+	-- sight line windows: transparent walls between adjacent rooms for route discovery
+	meta.window_walls = {}
+	for i = 1, #main_rooms - 1 do
+		if rng:chance(0.4) then
+			local from = main_rooms[i]
+			local to = main_rooms[i + 1]
+			meta.window_walls[#meta.window_walls + 1] = {
+				from_room = i,
+				to_room = i + 1,
+				from_center = { x = from.center.x, y = from.center.y },
+				to_center = { x = to.center.x, y = to.center.y },
+			}
+		end
+	end
+
 	return World.build(meta)
 end
 

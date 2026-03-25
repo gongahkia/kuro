@@ -254,6 +254,7 @@ function World.build(meta)
 		pillars = util.deepcopy(meta.pillars or {}),
 		sanityZones = util.deepcopy(meta.sanityZones or { safe = {}, dark = {}, cursed = {} }),
 		routeNodes = util.deepcopy(meta.routeNodes or {}),
+		window_walls = util.deepcopy(meta.window_walls or {}),
 		exit = meta.exit and util.deepcopy(meta.exit) or nil,
 		spawn = util.deepcopy(meta.spawn),
 		bossRoom = meta.bossRoom and util.deepcopy(meta.bossRoom) or nil,
