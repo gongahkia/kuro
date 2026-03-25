@@ -253,6 +253,7 @@ function World.build(meta)
 		secret_walls = util.deepcopy(meta.secret_walls or {}),
 		pillars = util.deepcopy(meta.pillars or {}),
 		sanityZones = util.deepcopy(meta.sanityZones or { safe = {}, dark = {}, cursed = {} }),
+		routeNodes = util.deepcopy(meta.routeNodes or {}),
 		exit = meta.exit and util.deepcopy(meta.exit) or nil,
 		spawn = util.deepcopy(meta.spawn),
 		bossRoom = meta.bossRoom and util.deepcopy(meta.bossRoom) or nil,
@@ -357,6 +358,14 @@ function World.build(meta)
 	for _, pillar in ipairs(world.pillars) do
 		pillar.destroyed = pillar.destroyed == true
 		attach_position(world, pillar)
+	end
+	for _, node in pairs(world.routeNodes) do
+		if node.start then
+			node.start_x, node.start_y = World.cell_to_world(node.start)
+		end
+		if node.finish then
+			node.finish_x, node.finish_y = World.cell_to_world(node.finish)
+		end
 	end
 
 	return world
