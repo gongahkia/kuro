@@ -622,6 +622,23 @@ local function build_standard_floor(config, rng, options)
 		::continue::
 	end
 
+	-- skip zones: narrow shortcuts between non-adjacent rooms (require advanced movement)
+	local skip_count = math.min(2, #main_rooms - 3)
+	for si = 1, skip_count do
+		local from_idx = rng:int(1, math.max(1, #main_rooms - 2))
+		local to_idx = math.min(#main_rooms, from_idx + 2)
+		if from_idx ~= to_idx then
+			local from_room = main_rooms[from_idx]
+			local to_room = main_rooms[to_idx]
+			local path = carve_corridor(meta, from_room.center, to_room.center, rng, "skip")
+			for _, cell in ipairs(path) do
+				if meta.cells[cell.y] and meta.cells[cell.y][cell.x] then
+					meta.cells[cell.y][cell.x].skip_zone = true
+				end
+			end
+		end
+	end
+
 	meta.spawn = {
 		cell = { x = main_rooms[1].center.x, y = main_rooms[1].center.y },
 		angle = 0,
