@@ -40,4 +40,24 @@ return {
 		end
 		assert(found, "expected ironman in available mutators")
 	end,
+	["meta exposes unlocked loadouts and flames"] = function()
+		local m = Meta.new({
+			meta_unlocks = {
+				loadout_scout = true,
+				light_color_red = true,
+			},
+		})
+		local loadouts = m:get_available_loadouts()
+		local flames = m:get_available_flames()
+		local found_loadout = false
+		local found_flame = false
+		for _, entry in ipairs(loadouts) do
+			if entry.id == "scout" then found_loadout = true end
+		end
+		for _, entry in ipairs(flames) do
+			if entry.id == "red" then found_flame = true end
+		end
+		assert(found_loadout, "expected scout loadout")
+		assert(found_flame, "expected red flame")
+	end,
 }
