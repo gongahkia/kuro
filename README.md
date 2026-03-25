@@ -26,6 +26,7 @@ make test
 - `Enter`: confirm title, menus, and replays
 - `Up`, `Down`: move through title and replay menus
 - `Left`, `Right`: adjust title options
+- `Enter` on `Practice Target`: open the practice target browser
 - `N`: roll a new seed, or advance the selected Sprint seed
 - `Z`, `X`, `C`: toggle `Embers`, `Echoes`, `Onslaught` on the title screen
 - `B`, `I`: toggle unlocked `Blacklight` and `Ironman` mutators on the title screen
@@ -45,6 +46,7 @@ make test
 - `P`: open progression from the result screen
 - `V`: open replay browser from the result screen
 - `1`, `2`, `3` on the result screen: jump into Sprint floor practice
+- `D` on the Sprint result screen: open the practice target browser
 - `G` on the Sprint result screen: play the current PB replay
 
 ## Modes
@@ -52,17 +54,17 @@ make test
 - `Classic`: standard seeded descent with selectable loadout, flame color, and mutators
 - `Daily Challenge`: fixed date-seeded `stalker` run with a locked daily profile
 - `Time Attack`: seeded descent with escalating pressure every 30 seconds
-- `Sprint Official`: curated race seeds, split timing, medals, PB records, and ghost comparison
-- `Sprint Practice`: same seed-routing surface with arbitrary seeds or curated seeds, floor starts, and no PB/medal recording
+- `Sprint Official`: curated race seed packs, split timing, medals, PB records, ghost comparison, and exported local finish summaries
+- `Sprint Practice`: the same authored route surfaces with floor starts, drill starts, optional auto-restart, and no PB/medal recording
 
 ## Systems
 
 - `Sanity`: the only non-HP pressure track; low sanity distorts vision, weakens automap clarity, and reduces light recovery
 - `Consumable belt`: `Calming Tonic`, `Speed Tonic`, and `Ward Charge` live in 3 quick-use slots
-- `Sprint`: official seed packs, split deltas, medal pace, PB ghosts, and practice floors
+- `Sprint`: three official seed packs, authored route manifests, gold splits, projected finish readouts, PB ghosts, floor practice, and drill practice
 - `Progression`: unlocks opt-in mutators, the `Scout` loadout, and cosmetic flame colors
-- `Replays`: record runs, save them locally, auto-save Sprint PBs, and replay them from the title screen
-- `Speed tech`: `Burn Dash` converts charged burst releases into movement, and `Flare Boost` rewards routing through freshly thrown flares
+- `Replays`: record runs, save them locally, auto-save Sprint PBs, export official finish summaries, and replay them from the title screen
+- `Speed tech`: `Burn Dash` converts charged burst releases into movement, and `Flare Boost` rewards routing through freshly thrown flares on authored route lines
 
 ## Structure
 
