@@ -32,7 +32,8 @@ function Stealth:get_noise_radius()
 	return self.noise_level * 0.8
 end
 
-function Stealth:get_speed_multiplier()
+function Stealth:get_speed_multiplier(is_sliding)
+	if is_sliding then return 1.0 end
 	return self.crouching and 0.55 or 1.0
 end
 

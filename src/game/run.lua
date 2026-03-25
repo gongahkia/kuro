@@ -1104,7 +1104,7 @@ function Run:update_player(dt)
 	local jitter = self.sanity:get_effects().control_jitter
 	self.player.angle = util.wrap_angle(self.player.angle + turn * self.player.turn_speed * dt + (jitter > 0 and (math.random() - 0.5) * jitter * dt or 0))
 
-	local stealth_mult = self.stealth:get_speed_multiplier()
+	local stealth_mult = self.stealth:get_speed_multiplier(self.momentum:is_sliding())
 	local dark_mult = (self.blackout_time > 0 and self.relics:get_value("dark_speed_mult", 1.0)) or 1.0
 	local move_speed = self.player.move_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
 	local strafe_speed = self.player.strafe_speed * stealth_mult * dark_mult * self.player.speed_boost_mult
@@ -1999,7 +1999,7 @@ function Run:draw()
 		x = self.player.x,
 		y = self.player.y,
 		angle = self.player.angle + math.sin(self.clock * 1.6) * view_distortion * 0.05,
-		height = self.player.height,
+		height = self.momentum:is_sliding() and 0.35 or self.player.height,
 	}
 	self.fx:apply_camera(self.camera, self.is_moving)
 	self.renderer:draw(self)
