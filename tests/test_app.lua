@@ -127,6 +127,115 @@ return {
 		assert(found_json_export, "expected sprint json export file")
 	end,
 
+	["app keeps legacy sprint ghost comparisons active"] = function()
+		local app, Replay = fresh_app()
+		app:load({})
+		local key = "sprint:stalker:black_flame_circuit:ember_arc"
+		Replay.init()
+		Replay.start_recording(4101, "stalker", {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			category_key = key,
+			pack_version = "1.0.0",
+		})
+		Replay.record_key_state("w", true, 0.1)
+		Replay.record_ghost_frame(0.1, 1, 2.5, 3.5)
+		Replay.set_metadata({
+			category_key = key,
+			pack_version = "1.0.0",
+			replay_file = "legacy_pb.txt",
+		})
+		Replay.stop_recording()
+		assert(Replay.save("legacy_pb"), "expected saved legacy pb replay")
+
+		app.settings.sprint_records[key] = {
+			best_time = 170,
+			best_time_pack_version = "1.0.0",
+			best_splits = {
+				{ id = "floor_1_clear", label = "Floor 1 Clear", floor = 1, time = 60, pack_version = "1.0.0" },
+				{ id = "run_finish", label = "Run Finish", floor = 3, time = 170, pack_version = "1.1.0" },
+			},
+			mixed_split_versions = true,
+			pb_replay = "legacy_pb.txt",
+		}
+
+		app.selected_mode = "sprint"
+		app.settings.selected_sprint_ruleset = "official"
+		app:start_run()
+
+		assert(app.run.ghost_compare ~= nil, "expected legacy ghost comparison to load")
+		assert(app.run.pb_pack_version == "1.0.0", "expected stored pb version on run")
+		assert(app.run.pack_version_mismatch == true, "expected legacy comparison warning")
+		assert(app.run.mixed_split_versions == true, "expected mixed split warning on run")
+	end,
+
+	["app saves final official sprint replay metadata"] = function()
+		local app, Replay = fresh_app()
+		app:load({})
+		local key = "sprint:stalker:black_flame_circuit:ember_arc"
+		app.settings.sprint_records[key] = {
+			best_time = 170,
+			best_time_pack_version = "1.0.0",
+			best_time_build_id = "legacy_build",
+			best_medal = "gold",
+			best_splits = {
+				{ id = "floor_1_clear", label = "Floor 1 Clear", floor = 1, time = 60, pack_version = "1.0.0" },
+				{ id = "run_finish", label = "Run Finish", floor = 3, time = 170, pack_version = "1.0.0" },
+			},
+			pb_replay = "legacy_pb.txt",
+		}
+
+		Replay.init()
+		Replay.start_recording(4101, "stalker", {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			category_key = key,
+			pack_version = "1.0.0",
+		})
+		Replay.record_key_state("w", true, 0.1)
+		Replay.record_ghost_frame(0.1, 1, 2.5, 3.5)
+		Replay.set_metadata({
+			category_key = key,
+			pack_version = "1.0.0",
+			replay_file = "legacy_pb.txt",
+		})
+		Replay.stop_recording()
+		assert(Replay.save("legacy_pb"), "expected saved legacy pb replay")
+
+		app.selected_mode = "sprint"
+		app.settings.selected_sprint_ruleset = "official"
+		app:start_run()
+		Replay.record_key_state("w", true, 0.1)
+		app.run.clock = 172
+		app.run.splits = {
+			{ id = "floor_1_start", label = "Floor 1 Start", floor = 1, time = 0 },
+			{ id = "floor_1_clear", label = "Floor 1 Clear", floor = 1, time = 58 },
+			{ id = "run_finish", label = "Run Finish", floor = 3, time = 172 },
+		}
+		app:record_result("victory")
+
+		local finish_path = nil
+		for path in pairs(files) do
+			if path:match("^replays/run_") then
+				finish_path = path
+			end
+		end
+		assert(finish_path ~= nil, "expected saved official finish replay")
+		local finish_replay = Replay.inspect(finish_path)
+		assert(finish_replay.metadata.replay_file == finish_path:match("^replays/(.+)$"), "expected saved replay filename metadata")
+		assert(finish_replay.metadata.pb_pack_version == "1.0.0", "expected legacy pb provenance in replay metadata")
+		assert(finish_replay.metadata.pack_version_mismatch == true, "expected replay mismatch warning")
+		assert(finish_replay.metadata.mixed_split_versions == true, "expected replay mixed split warning")
+		assert(finish_replay.metadata.best_possible_time == 170, "expected final best possible time in replay metadata")
+		assert(type(finish_replay.metadata.projected_saves) == "table", "expected projected saves in replay metadata")
+		assert(app.settings.sprint_records[key].best_time == 170, "expected official pb to remain legacy")
+		assert(app.settings.sprint_records[key].best_time_pack_version == "1.0.0", "expected pb version to remain legacy")
+	end,
+
 	["app practice sprint wins leave official records untouched"] = function()
 		local app, Replay = fresh_app()
 		app:load({})
