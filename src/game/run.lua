@@ -134,6 +134,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			summon_timer = 0,
 			wall_timer = 0,
 			weakened = 0,
+			route = nil,
 		},
 		completed = false,
 		player = {
@@ -159,15 +160,18 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			ward_charges = 0,
 			damage_taken_mult = (mutators and mutators.ironman) and 2 or 1,
 			blacklight = mutators and mutators.blacklight == true or false,
-				speed_boost_time = 0,
-				speed_boost_mult = 1.0,
-				invulnerability_time = 0,
-				second_chance_used = false,
-				dash_time = 0,
-				dash_cooldown = 0,
-				dash_vx = 0,
-				dash_vy = 0,
-			},
+			speed_boost_time = 0,
+			speed_boost_mult = 1.0,
+			invulnerability_time = 0,
+			second_chance_used = false,
+			dash_time = 0,
+			dash_cooldown = 0,
+			dash_vx = 0,
+			dash_vy = 0,
+			flare_line_window = 0,
+			dash_feedback_time = 0,
+			flare_feedback_time = 0,
+		},
 			time_attack_elapsed = 0,
 			time_attack_level = 0,
 			time_attack_enemy_mult = 1.0,
@@ -296,6 +300,7 @@ function Run:summary()
 		gold_splits = gold_splits,
 		best_possible_time = self.best_possible_time,
 		timer_start_reason = self.timer_start_reason,
+		projected_saves = Sprint.compute_projected_saves(self.pb_splits, self.splits, 3),
 		tech_usage = {
 			burn_dashes = self.stats.burn_dashes or 0,
 			flare_boosts = self.stats.flare_boosts or 0,
@@ -391,23 +396,130 @@ end
 
 function Run:mark_route_entry(tag, cell_x, cell_y)
 	if not tag then
-		return
+		return false
 	end
 	local key = string.format("%s:%d:%d", tag, cell_x, cell_y)
 	if self.route_cells_seen[key] then
-		return
+		return false
 	end
 	self.route_cells_seen[key] = true
-	if tag == "dark_lane" then
-		self.route_events.dark_lane_entries = self.route_events.dark_lane_entries + 1
+	return true
+end
+
+function Run:find_route_node(kind, cell_x, cell_y, fields)
+	for _, node in pairs(self.world.routeNodes or {}) do
+		if not kind or node.kind == kind then
+			for _, field in ipairs(fields or { "path" }) do
+				for _, cell in ipairs(node[field] or {}) do
+					if cell.x == cell_x and cell.y == cell_y then
+						return node
+					end
+				end
+			end
+			if node.start and node.start.x == cell_x and node.start.y == cell_y then
+				return node
+			end
+			if node.finish and node.finish.x == cell_x and node.finish.y == cell_y then
+				return node
+			end
+		end
 	end
+	return nil
+end
+
+function Run:get_boss_route_pillar(priority)
+	for _, pillar in ipairs(self.world.pillars or {}) do
+		if pillar.route_priority == priority then
+			return pillar
+		end
+	end
+	return nil
+end
+
+function Run:get_boss_route_anchor(priority)
+	for _, anchor in ipairs(self.world.anchors or {}) do
+		if anchor.route_priority == priority then
+			return anchor
+		end
+	end
+	return nil
+end
+
+function Run:get_boss_route_target()
+	local route = self.boss and self.boss.route or nil
+	if not route or self.floor ~= self.total_floors then
+		return nil
+	end
+	local pillar = self:get_boss_route_pillar(route.next_pillar_priority)
+	if pillar and not pillar.destroyed then
+		return {
+			type = "pillar",
+			label = route.next_pillar_priority == 1 and "Primary route pillar" or "Secondary route pillar",
+			cell = pillar.cell,
+			x = pillar.x,
+			y = pillar.y,
+		}
+	end
+	local anchor = self:get_boss_route_anchor(route.next_anchor_priority)
+	if anchor and not anchor.lit then
+		return {
+			type = "anchor",
+			label = string.format("Route anchor %d", route.next_anchor_priority),
+			cell = anchor.cell,
+			x = anchor.x,
+			y = anchor.y,
+			bonus_active = route.bonus_active == true,
+		}
+	end
+	return nil
+end
+
+function Run:get_route_indicator()
+	local target = self:get_boss_route_target()
+	if not target then
+		return nil
+	end
+	local dx = target.x - self.player.x
+	local dy = target.y - self.player.y
+	local distance = math.sqrt(dx * dx + dy * dy)
+	local angle_to = math.atan(dy, dx)
+	local delta = ((angle_to - self.player.angle + math.pi) % (math.pi * 2)) - math.pi
+	return {
+		label = target.label,
+		type = target.type,
+		distance = distance,
+		angle_delta = delta,
+		bonus_active = target.bonus_active == true,
+	}
 end
 
 function Run:update_route_progress()
 	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
 	local tags = World.get_cell_tags(self.world, cell_x, cell_y) or {}
 	if tags.dark_lane then
-		self:mark_route_entry("dark_lane", cell_x, cell_y)
+		if self:mark_route_entry("dark_lane", cell_x, cell_y) then
+			self.route_events.dark_lane_entries = self.route_events.dark_lane_entries + 1
+		end
+	end
+	if tags.flare_checkpoint and self.player.flare_line_window > 0 then
+		local node = self:find_route_node("flare_line", cell_x, cell_y, { "checkpoints" })
+		if node and self:mark_route_entry("flare_checkpoint", cell_x, cell_y) then
+			self.player.speed_boost_time = math.max(self.player.speed_boost_time, 1.2 + (node.boost_extension or 0.32))
+			self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, node.speed_mult or 1.46)
+			self.player.flare_feedback_time = 0.8
+			self.route_events.flare_line_boosts = self.route_events.flare_line_boosts + 1
+			self:push_message("[route] the flare line catches and carries you onward.")
+		end
+	end
+	if tags.burn_gate and self.player.dash_time > 0 then
+		local node = self:find_route_node("burn_lane", cell_x, cell_y, { "gate_cells" })
+		if node and self:mark_route_entry("burn_gate", cell_x, cell_y) then
+			self.player.dash_time = self.player.dash_time + (node.dash_extension or 0.08)
+			self.player.light_charge = math.min(self.player.max_light_charge, self.player.light_charge + (node.light_refund or 0))
+			self.player.dash_feedback_time = 0.8
+			self.route_events.burn_lane_dashes = self.route_events.burn_lane_dashes + 1
+			self:push_message("[route] the burn gate extends the dash.")
+		end
 	end
 end
 
@@ -426,6 +538,8 @@ function Run:get_split_stack()
 	end
 	local segment_start = last_split and last_split.time or 0
 	local projected_finish, projected_delta = Sprint.projected_finish(self.pb_splits, self.splits, self.clock)
+	local rows = Sprint.get_split_rows(self.pb_splits, self.splits)
+	local last_row = rows[#rows]
 	return {
 		last = last_split,
 		next = next_split,
@@ -433,6 +547,8 @@ function Run:get_split_stack()
 		projected_finish = projected_finish,
 		projected_delta = projected_delta,
 		best_possible_time = self.best_possible_time,
+		last_segment_time = last_row and last_row.segment_time or nil,
+		last_segment_best = last_row and last_row.best_segment_time or nil,
 	}
 end
 
@@ -514,7 +630,12 @@ function Run:can_reach_anchor(anchor, current_cell, target_cell)
 		return true
 	end
 	if self.floor == self.total_floors and (self.boss.weakened or 0) > 0 then
-		return util.distance(self.player.x, self.player.y, anchor.x, anchor.y) <= (1.2 + (self.boss.weakened or 0) * 0.18)
+		local bonus = 0
+		local route = self.boss and self.boss.route or nil
+		if route and route.bonus_active and anchor.route_priority == route.next_anchor_priority then
+			bonus = route.anchor_range_bonus or 0
+		end
+		return util.distance(self.player.x, self.player.y, anchor.x, anchor.y) <= (1.2 + (self.boss.weakened or 0) * 0.18 + bonus)
 	end
 	return false
 end
@@ -546,6 +667,9 @@ function Run:load_floor(floor)
 	self.player.dash_cooldown = 0
 	self.player.dash_vx = 0
 	self.player.dash_vy = 0
+	self.player.flare_line_window = 0
+	self.player.dash_feedback_time = 0
+	self.player.flare_feedback_time = 0
 	self.blackout_time = 0
 	self.alarm_time = 0
 	self.guidance_time = 0
@@ -570,7 +694,19 @@ function Run:load_floor(floor)
 		summon_timer = 6,
 		wall_timer = 5,
 		weakened = self.boss and self.boss.weakened or 0,
+		route = nil,
 	}
+	local pillar_route = self.world.routeNodes and self.world.routeNodes.pillar_route_3 or nil
+	if floor == self.total_floors and pillar_route then
+		self.boss.route = {
+			next_pillar_priority = 1,
+			next_anchor_priority = 1,
+			bonus_active = false,
+			hazard_mult = pillar_route.hazard_mult or 0.76,
+			anchor_range_bonus = pillar_route.anchor_range_bonus or 0.7,
+			anchor_restore = pillar_route.anchor_restore or 12,
+		}
+	end
 	self:refresh_secret_clues()
 
 	if floor == self.total_floors then
@@ -668,6 +804,11 @@ function Run:current_objective_cell()
 			return { x = best_pickup.x, y = best_pickup.y }
 		end
 		return self.world.exit and { x = self.world.exit.cell.x, y = self.world.exit.cell.y } or nil
+	end
+
+	local route_target = self:get_boss_route_target()
+	if route_target and route_target.cell and (route_target.type == "pillar" or self.player.inventory_torches > 0) then
+		return { x = route_target.cell.x, y = route_target.cell.y }
 	end
 
 	for _, pickup in ipairs(self.world.pickups) do
@@ -777,9 +918,20 @@ function Run:damage_pillar(pillar, amount)
 	if pillar.health <= 0 then
 		pillar.destroyed = true
 		local weaken_amount = self.mode == "sprint" and 1.4 or 1
+		local route = self.boss and self.boss.route or nil
+		local expected_break = route and pillar.route_priority and pillar.route_priority == route.next_pillar_priority
 		if pillar.route_role == "pillar_route" then
 			weaken_amount = weaken_amount + (pillar.weaken_bonus or 0.5)
 			self.route_events.pillar_route_breaks = self.route_events.pillar_route_breaks + 1
+			if expected_break then
+				route.bonus_active = true
+				while self:get_boss_route_pillar(route.next_pillar_priority) and self:get_boss_route_pillar(route.next_pillar_priority).destroyed do
+					route.next_pillar_priority = route.next_pillar_priority + 1
+				end
+				self:push_message("[route] the pillar order holds. The next anchor window opens.")
+			elseif route then
+				self:push_message("[route] the pillar breaks off line. Only the weaken bonus remains.")
+			end
 		end
 		self.boss.weakened = (self.boss.weakened or 0) + weaken_amount
 		self.stats.pillars_destroyed = self.stats.pillars_destroyed + 1
@@ -1221,6 +1373,23 @@ function Run:try_use_anchor(anchor)
 	self.player.inventory_torches = self.player.inventory_torches - 1
 	self.stats.anchors_lit = self.stats.anchors_lit + 1
 	self.sanity:restore(8)
+	local route = self.boss and self.boss.route or nil
+	local expected_anchor = route and anchor.route_priority and anchor.route_priority == route.next_anchor_priority
+	if route and expected_anchor then
+		route.next_anchor_priority = route.next_anchor_priority + 1
+		if route.bonus_active then
+			self.sanity:restore(route.anchor_restore or 12)
+			self.boss.pulse_timer = math.max(self.boss.pulse_timer or 0, 1.8)
+			self.boss.wall_timer = math.max(self.boss.wall_timer or 0, 2.1)
+			self.boss.summon_timer = math.max(self.boss.summon_timer or 0, 2.4)
+			route.bonus_active = false
+			self:push_message("[route] the authored line lands cleanly and the chamber slows.")
+		else
+			self:push_message("[route] you realign with the authored anchor order.")
+		end
+	elseif route and anchor.route_priority then
+		self:push_message("[route] the anchor lights, but the fastest line slips.")
+	end
 	self:push_message(string.format("Anchor lit %d / %d.", self.stats.anchors_lit, #self.world.anchors))
 	if self.stats.anchors_lit >= #self.world.anchors then
 		self:record_split("final_anchor_lit", "Final Anchor Lit", self.floor)
@@ -1351,12 +1520,8 @@ function Run:try_burn_dash(charge)
 	self.player.dash_cooldown = 0.55
 	self.player.dash_vx = dir_x * (5.4 + charge * 2.8)
 	self.player.dash_vy = dir_y * (5.4 + charge * 2.8)
+	self.player.dash_feedback_time = 0.5
 	self.stats.burn_dashes = self.stats.burn_dashes + 1
-	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
-	local tags = World.get_cell_tags(self.world, cell_x, cell_y) or {}
-	if tags.burn_lane then
-		self.route_events.burn_lane_dashes = self.route_events.burn_lane_dashes + 1
-	end
 	self:push_message("[dash] the burst hurls you forward.")
 	return true
 end
@@ -1493,15 +1658,19 @@ function Run:update_flares(dt)
 		flare.ttl = flare.ttl - dt
 		flare.boost_window = math.max(0, (flare.boost_window or 0) - dt)
 		if not flare.boosted and flare.boost_window > 0 and util.distance(self.player.x, self.player.y, flare.x, flare.y) <= 0.78 then
-		flare.boosted = true
-		self.player.speed_boost_time = math.max(self.player.speed_boost_time, 1.25)
-		self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, 1.38)
-		self.stats.flare_boosts = self.stats.flare_boosts + 1
-		local tags = World.get_cell_tags(self.world, flare.cell.x, flare.cell.y) or {}
-		if tags.flare_line then
-			self.route_events.flare_line_boosts = self.route_events.flare_line_boosts + 1
-		end
-		self:push_message("[boost] the flare slings you ahead.")
+			flare.boosted = true
+			self.player.speed_boost_time = math.max(self.player.speed_boost_time, 1.25)
+			self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, 1.38)
+			self.player.flare_feedback_time = 0.5
+			self.stats.flare_boosts = self.stats.flare_boosts + 1
+			local node = self:find_route_node("flare_line", flare.cell.x, flare.cell.y, { "path", "checkpoints" })
+			if node then
+				self.player.flare_line_window = math.max(self.player.flare_line_window, node.boost_window or flare.boost_window or 1.1)
+				self.player.speed_boost_mult = math.max(self.player.speed_boost_mult, node.speed_mult or 1.46)
+			else
+				self.player.flare_line_window = math.max(self.player.flare_line_window, flare.boost_window or 0)
+			end
+			self:push_message("[boost] the flare slings you ahead.")
 		end
 		if flare.ttl <= 0 then
 			table.remove(self.flares, index)
@@ -1534,14 +1703,16 @@ function Run:update_hazards(dt)
 end
 
 function Run:update_sanity(dt)
+	local cell_x, cell_y = World.world_to_cell(self.player.x, self.player.y)
 	local tags = self:get_current_tags()
+	local dark_lane = tags.dark_lane and self:find_route_node("dark_lane", cell_x, cell_y, { "path" }) or nil
 	local status = self.sanity:update(dt, {
 		blackout_time = self.blackout_time,
 		in_safe_zone = tags.safe_zone == true,
 		in_dark_zone = tags.dark_zone == true or self.boss.fog_active == true,
 		in_cursed_zone = tags.cursed_zone == true,
 		enemy_pressure = self:get_enemy_pressure(),
-		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0) * (tags.dark_lane and 1.2 or 1.0),
+		drain_mult = self.relics:get_value("sanity_drain_mult", 1.0) * (dark_lane and dark_lane.drain_mult or (tags.dark_lane and 1.2 or 1.0)),
 	})
 	self.sanity_status = status
 end
@@ -1576,6 +1747,10 @@ function Run:update_boss(dt)
 	end
 	local boss_challenge_mult = Challenges.time_attack_boss_mult(self.time_attack_level or 0)
 	local weaken_factor = 1 + (self.boss.weakened or 0) * (self.mode == "sprint" and 0.24 or 0.16)
+	local route = self.boss.route
+	if route and route.bonus_active then
+		weaken_factor = weaken_factor * (1 / math.max(0.45, route.hazard_mult or 0.76))
+	end
 
 	-- phase determination: 5 phases
 	local prev_phase = self.boss.phase
@@ -1726,6 +1901,9 @@ function Run:update(dt)
 	self.player.speed_boost_mult = self.player.speed_boost_time > 0 and self.player.speed_boost_mult or 1.0
 	self.player.dash_time = math.max(0, self.player.dash_time - dt)
 	self.player.dash_cooldown = math.max(0, self.player.dash_cooldown - dt)
+	self.player.flare_line_window = math.max(0, self.player.flare_line_window - dt)
+	self.player.dash_feedback_time = math.max(0, self.player.dash_feedback_time - dt)
+	self.player.flare_feedback_time = math.max(0, self.player.flare_feedback_time - dt)
 	if self.guidance_time <= 0 then
 		self.guidance_cells = {}
 	end
@@ -1797,11 +1975,18 @@ function Run:draw()
 		Renderer = require("src.render.renderer")
 	end
 	self.renderer = self.renderer or Renderer.new(self.settings)
-	self.objective_text = self.floor < self.total_floors
-		and (self.player.collected_torches < self.player.torch_goal
+	if self.floor < self.total_floors then
+		self.objective_text = self.player.collected_torches < self.player.torch_goal
 			and string.format("Objective: recover %d more torches.", self.player.torch_goal - self.player.collected_torches)
-			or "Objective: reach the exit.")
-		or string.format("Objective: light %d remaining anchors.", #self.world.anchors - self.stats.anchors_lit)
+			or "Objective: reach the exit."
+	else
+		local route_target = self:get_boss_route_target()
+		if route_target and self.mode == "sprint" and (route_target.type == "pillar" or self.player.inventory_torches > 0) then
+			self.objective_text = string.format("Objective: %s.", route_target.label)
+		else
+			self.objective_text = string.format("Objective: light %d remaining anchors.", #self.world.anchors - self.stats.anchors_lit)
+		end
+	end
 	local view_distortion = self.sanity:get_effects().view_distortion
 	self.camera = {
 		x = self.player.x,
