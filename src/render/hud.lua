@@ -269,33 +269,48 @@ function HUD:draw(run_state, lg)
 			else
 				lg.setColor(0.82, 0.84, 0.88)
 			end
-			lg.print("Last " .. format_delta(delta), 230, 54)
+			lg.print(string.format("Prev %s  %s", stack.last and stack.last.label or "Start", format_delta(delta)), 230, 54)
 			lg.setColor(0.82, 0.84, 0.88)
-			lg.print(string.format("Segment %s  %s", stack.last and stack.last.label or "Start", format_time(stack.current_segment_time or 0)), 230, 74)
-			lg.print(string.format("Next %s", stack.next and stack.next.label or "Finish"), 230, 94)
+			lg.print(string.format("Live Segment %s", format_time(stack.current_segment_time or 0)), 230, 74)
+			if stack.last_segment_time and stack.last_segment_best then
+				lg.print(string.format("Last Seg %s / %s", format_time(stack.last_segment_time), format_time(stack.last_segment_best)), 230, 94)
+			else
+				lg.print("Last Seg --", 230, 94)
+			end
+			lg.print(string.format("Next %s", stack.next and stack.next.label or "Finish"), 230, 114)
 			if stack.projected_finish then
-				lg.print(string.format("Proj %s  %s", format_time(stack.projected_finish), format_delta(stack.projected_delta)), 230, 114)
+				lg.print(string.format("Proj %s  %s", format_time(stack.projected_finish), format_delta(stack.projected_delta)), 230, 134)
 			end
 			if stack.best_possible_time then
-				lg.print("Best Possible " .. format_time(stack.best_possible_time), 230, 134)
+				lg.print("Best Possible " .. format_time(stack.best_possible_time), 230, 154)
 			end
 		end
 		if run_state.settings.runner_show_medal_pace ~= false then
 			local pace = run_state:get_medal_pace()
 			if pace then
 				lg.setColor(0.7, 0.86, 1.0)
-				lg.print(string.format("Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 154)
+				lg.print(string.format("Gold Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 174)
 			end
 		end
 		local cue = run_state.get_ghost_cue and run_state:get_ghost_cue() or nil
 		if cue and run_state.settings.runner_ghost_visible ~= false then
 			lg.setColor(0.72, 0.9, 1.0)
-			lg.print(string.format("Ghost %.1fm  %+.0f deg", cue.distance or 0, math.deg(cue.angle_delta or 0)), 230, 174)
+			local heading = math.deg(cue.angle_delta or 0)
+			local direction = math.abs(heading) < 18 and "ahead"
+				or (heading < 0 and "left" or "right")
+			lg.print(string.format("Ghost %.1fm  %s %.0f deg", cue.distance or 0, direction, math.abs(heading)), 230, 194)
 		end
-		local tech_y = 194
+		local route = run_state.get_route_indicator and run_state:get_route_indicator() or nil
+		if route then
+			lg.setColor(0.8, 0.96, 0.76)
+			lg.print(string.format("Route %s  %.1fm  %+.0f deg", route.label or route.type or "target", route.distance or 0, math.deg(route.angle_delta or 0)), 230, 214)
+		end
+		local tech_y = route and 234 or 214
 		lg.setColor(0.96, 0.82, 0.46)
 		local dash_ready = run_state.player.burst_charge >= 0.55 and run_state.player.dash_cooldown <= 0 and run_state.player.light_charge >= 12
-		lg.print(dash_ready and "Burn Dash armed" or string.format("Burn cooldown %.2f", run_state.player.dash_cooldown or 0), 230, tech_y)
+		local dash_text = run_state.player.dash_feedback_time > 0 and "Burn Dash landed"
+			or (dash_ready and "Burn Dash armed" or string.format("Burn cooldown %.2f", run_state.player.dash_cooldown or 0))
+		lg.print(dash_text, 230, tech_y)
 		local flare_hot = false
 		for _, flare in ipairs(run_state.flares or {}) do
 			if flare.boosted ~= true and (flare.boost_window or 0) > 0 then
@@ -304,7 +319,10 @@ function HUD:draw(run_state, lg)
 			end
 		end
 		lg.setColor(1.0, 0.84, 0.42)
-		lg.print(flare_hot and "Flare line hot" or "Flare line idle", 230, tech_y + 20)
+		local flare_text = run_state.player.flare_feedback_time > 0 and "Flare line caught"
+			or (run_state.player.flare_line_window > 0 and string.format("Flare window %.2fs", run_state.player.flare_line_window))
+			or (flare_hot and "Flare line primed" or "Flare line idle")
+		lg.print(flare_text, 230, tech_y + 20)
 	else
 		lg.setColor(0.82, 0.84, 0.88)
 		lg.print("Descent timer active", 230, 34)
