@@ -712,6 +712,13 @@ function Sprint.compute_best_possible_time(best_splits)
 	return total > 0 and total or ordered[#ordered].time
 end
 
+function Sprint.compute_sum_of_best(records, category_key)
+	if not records or not category_key then return nil end
+	local record = records[category_key]
+	if not record or not record.best_splits then return nil end
+	return Sprint.compute_best_possible_time(record.best_splits)
+end
+
 function Sprint.projected_finish(best_splits, current_splits, current_time)
 	local best_index = split_index(best_splits)
 	local current_ordered = ordered_splits(current_splits)

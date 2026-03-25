@@ -285,7 +285,7 @@ function HUD:draw(run_state, lg)
 				lg.print(string.format("Proj %s  %s", format_time(stack.projected_finish), format_delta(stack.projected_delta)), 230, 134)
 			end
 			if stack.best_possible_time then
-				lg.print("Best Possible " .. format_time(stack.best_possible_time), 230, 154)
+				lg.print("Sum of Best " .. format_time(stack.best_possible_time), 230, 154)
 			end
 		end
 		if run_state.settings.runner_show_medal_pace ~= false then
