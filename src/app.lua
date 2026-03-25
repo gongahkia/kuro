@@ -6,6 +6,7 @@ local Meta = require("src.game.meta")
 local Replay = require("src.game.replay")
 local Challenges = require("src.game.challenges")
 local Sprint = require("src.game.sprint")
+local Build = require("src.core.build")
 local util = require("src.core.util")
 
 local App = {}
@@ -15,9 +16,10 @@ local title_items = {
 	"start",
 	"difficulty",
 	"mode",
+	"sprint_pack",
 	"sprint_ruleset",
 	"sprint_seed",
-	"practice_floor",
+	"practice_target",
 	"loadout",
 	"flame",
 	"progression",
@@ -29,7 +31,7 @@ local difficulty_cycle = { "apprentice", "stalker", "nightmare" }
 local mode_cycle = { "classic", "daily", "time_attack", "sprint" }
 local sprint_ruleset_cycle = { "official", "practice" }
 local replay_sort_cycle = { "latest", "duration", "mode", "seed" }
-local replay_filter_cycle = { "all", "sprint", "classic", "daily", "time_attack" }
+local replay_filter_cycle = { "all", "official_sprint", "floor_practice", "drill", "classic", "daily", "time_attack" }
 
 local function cycle_value(values, current, direction)
 	local index = 1
@@ -75,6 +77,9 @@ function App.new()
 		meta = nil,
 		replay_entries = {},
 		selected_replay_index = 1,
+		drill_entries = {},
+		selected_drill_index = 1,
+		drill_source = nil,
 		replay_sort = "latest",
 		replay_filter_mode = "all",
 		replay_pb_only = false,
@@ -91,6 +96,16 @@ end
 function App:load(_args)
 	self.meta = Meta.new(self.settings)
 	self.selected_mode = self.settings.selected_mode or "classic"
+	if not self.settings.selected_sprint_practice_target and self.settings.selected_sprint_practice_floor then
+		self.settings.selected_sprint_practice_target = string.format("floor:%d", self.settings.selected_sprint_practice_floor)
+	end
+	self.settings.selected_sprint_pack_id = self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id()
+	self.settings.selected_sprint_seed_id = self.settings.selected_sprint_seed_id or Sprint.get_seed_by_index(self.settings.selected_sprint_pack_id, 1).id
+	self.settings.selected_sprint_practice_target = Sprint.normalize_practice_target(
+		self.settings.selected_sprint_pack_id,
+		self.settings.selected_sprint_seed_id,
+		self.settings.selected_sprint_practice_target or "floor:1"
+	)
 	self.seed = os.time()
 	Replay.init()
 	self:refresh_replays()
@@ -122,6 +137,22 @@ end
 
 function App:is_sprint_official()
 	return self.selected_mode == "sprint" and (self.settings.selected_sprint_ruleset or "official") == "official"
+end
+
+function App:get_sprint_pack()
+	return Sprint.get_pack(self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id())
+end
+
+function App:get_practice_target_id()
+	return Sprint.normalize_practice_target(
+		self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(),
+		self.settings.selected_sprint_seed_id or "ember_arc",
+		self.settings.selected_sprint_practice_target or "floor:1"
+	)
+end
+
+function App:get_practice_target_label(pack_id, seed_id, target_id)
+	return Sprint.target_label(pack_id or self.settings.selected_sprint_pack_id, seed_id or self.settings.selected_sprint_seed_id, target_id or self:get_practice_target_id())
 end
 
 function App:get_effective_config()
@@ -156,17 +187,19 @@ function App:get_effective_config()
 				seed = seed_entry.seed,
 				sprint_seed_pack_id = pack_id,
 				sprint_seed_id = seed_entry.id,
+				pack_version = Sprint.get_pack_version(pack_id),
 				category_key = Sprint.category_key(self.selected_difficulty, pack_id, seed_entry.id),
 				mutators = {},
 				loadout = "default",
 				flame_color = self.settings.selected_flame_color or "amber",
-				practice_floor = 1,
+				practice_target = nil,
 				start_floor = 1,
 				official_record_eligible = true,
 			}
 		end
 
-		local practice_floor = util.clamp(self.settings.selected_sprint_practice_floor or 1, 1, 3)
+		local practice_target = Sprint.normalize_practice_target(pack_id, selected_seed_id, self.settings.selected_sprint_practice_target or "floor:1")
+		local practice_info = Sprint.get_practice_target(pack_id, selected_seed_id, practice_target, self.selected_difficulty)
 		local seed = self.seed
 		local seed_pack_id = nil
 		local seed_id = nil
@@ -183,11 +216,13 @@ function App:get_effective_config()
 			seed = seed,
 			sprint_seed_pack_id = seed_pack_id,
 			sprint_seed_id = seed_id,
+			pack_version = seed_pack_id and Sprint.get_pack_version(seed_pack_id) or "",
 			mutators = util.deepcopy(self.selected_mutators),
 			loadout = self.settings.selected_loadout or "default",
 			flame_color = self.settings.selected_flame_color or "amber",
-			practice_floor = practice_floor,
-			start_floor = practice_floor,
+			practice_target = practice_info.id,
+			practice_target_label = practice_info.label,
+			start_floor = practice_info.floor or 1,
 			official_record_eligible = false,
 		}
 	end
@@ -229,15 +264,15 @@ end
 function App:build_ghost_compare(config)
 	local record = self:get_sprint_record(config)
 	if not record or not record.pb_replay then
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	end
 	local replay = Replay.inspect(record.pb_replay)
 	if not replay or replay.metadata.category_key ~= config.category_key then
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	end
 	return {
 		frames = replay.ghost_frames or {},
-	}, record.best_time, record.best_splits or {}
+	}, record.best_time, record.best_splits or {}, record.best_possible_time
 end
 
 function App:start_run(config)
@@ -247,9 +282,9 @@ function App:start_run(config)
 	self.last_run_config = util.deepcopy(config)
 	self.last_run_config.replay_mode = nil
 
-	local ghost_compare, pb_time, pb_splits = nil, nil, nil
+	local ghost_compare, pb_time, pb_splits, best_possible_time = nil, nil, nil, nil
 	if not config.replay_mode then
-		ghost_compare, pb_time, pb_splits = self:build_ghost_compare(config)
+		ghost_compare, pb_time, pb_splits, best_possible_time = self:build_ghost_compare(config)
 	end
 
 	self.run = Run.new(config.difficulty, config.seed, config.mutators, self.settings, {
@@ -258,7 +293,8 @@ function App:start_run(config)
 		sprint_ruleset = config.sprint_ruleset,
 		sprint_seed_pack_id = config.sprint_seed_pack_id,
 		sprint_seed_id = config.sprint_seed_id,
-		practice_floor = config.practice_floor,
+		pack_version = config.pack_version,
+		practice_target = config.practice_target,
 		start_floor = config.start_floor or 1,
 		category_key = config.category_key,
 		loadout = config.loadout,
@@ -268,6 +304,7 @@ function App:start_run(config)
 		ghost_compare = ghost_compare,
 		pb_total_time = pb_time,
 		pb_splits = pb_splits,
+		best_possible_time = best_possible_time,
 		medal_targets = config.mode == "sprint" and config.sprint_ruleset == "official"
 			and Sprint.get_medal_targets(config.sprint_seed_pack_id, config.sprint_seed_id, config.difficulty)
 			or nil,
@@ -281,10 +318,11 @@ function App:start_run(config)
 			sprint_seed_pack_id = config.sprint_seed_pack_id,
 			sprint_seed_id = config.sprint_seed_id,
 			category_key = config.category_key,
+			pack_version = config.pack_version,
 			mutators = config.mutators,
 			loadout = config.loadout,
 			flame_color = config.flame_color,
-			practice_floor = config.practice_floor,
+			practice_target = config.practice_target,
 			start_floor = config.start_floor or 1,
 			official_record_eligible = config.official_record_eligible == true,
 		})
@@ -296,6 +334,10 @@ function App:start_run(config)
 			seed_id = config.sprint_seed_id or "",
 			ruleset = config.sprint_ruleset or "",
 			medal = "",
+			build_id = Build.get_id(),
+			pack_version = config.pack_version or "",
+			practice_target = config.practice_target or "",
+			timer_start_reason = "",
 		})
 	end
 	self.screen = "play"
@@ -309,12 +351,27 @@ function App:return_to_title()
 	self:refresh_replays()
 end
 
+local function replay_bucket(replay)
+	local mode = replay.context.mode or "classic"
+	if mode ~= "sprint" then
+		return mode
+	end
+	if replay.context.sprint_ruleset == "official" then
+		return "official_sprint"
+	end
+	local target = replay.context.practice_target or ""
+	if target:match("^drill:") then
+		return "drill"
+	end
+	return "floor_practice"
+end
+
 function App:refresh_replays()
 	local entries = {}
 	for _, file in ipairs(Replay.list_replays()) do
 		local replay = Replay.inspect(file)
 		if replay then
-			local mode = replay.context.mode or "classic"
+			local mode = replay_bucket(replay)
 			local pb = replay.metadata.pb == true
 			if (self.replay_filter_mode == "all" or mode == self.replay_filter_mode)
 				and (not self.replay_pb_only or pb) then
@@ -372,7 +429,12 @@ function App:save_replay_snapshot(reason, filename, extra_metadata)
 		seed_id = summary.sprint_seed_id or "",
 		ruleset = summary.sprint_ruleset or "",
 		medal = summary.medal or "",
+		build_id = Build.get_id(),
+		pack_version = summary.pack_version or "",
+		practice_target = summary.practice_target or "",
+		timer_start_reason = summary.timer_start_reason or "",
 		tech_usage = summary.tech_usage or {},
+		route_events = summary.route_events or {},
 	})
 	local ok = Replay.save(filename)
 	if ok then
@@ -412,8 +474,9 @@ function App:record_result(outcome)
 		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "official" then
 			local records, sprint_result = Sprint.update_record(self.settings.sprint_records, self.last_summary)
 			self.settings.sprint_records = records
+			local pb_name = nil
 			if sprint_result.new_pb and self.settings.runner_auto_save_pb_replay ~= false then
-				local pb_name = Replay.pb_filename(sprint_result.category_key)
+				pb_name = Replay.pb_filename(sprint_result.category_key)
 				if self:save_replay_snapshot("pb_finish", pb_name, { pb = true, quiet = true }) then
 					local with_replay, replay_result = Sprint.update_record(self.settings.sprint_records, self.last_summary, pb_name)
 					self.settings.sprint_records = with_replay
@@ -421,6 +484,11 @@ function App:record_result(outcome)
 				end
 			end
 			self.last_sprint_record = sprint_result
+			self:export_sprint_summary(self.last_summary, sprint_result, pb_name)
+		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "practice" then
+			local records = self.settings.sprint_practice_records or {}
+			local updated_records = Sprint.update_practice_record(records, self.last_summary)
+			self.settings.sprint_practice_records = updated_records
 		end
 	end
 
@@ -446,13 +514,14 @@ function App:start_selected_replay()
 		sprint_ruleset = context.sprint_ruleset,
 		sprint_seed_pack_id = context.sprint_seed_pack_id,
 		sprint_seed_id = context.sprint_seed_id,
+		pack_version = context.pack_version or replay.metadata.pack_version,
 		category_key = replay.metadata.category_key or context.category_key,
 		difficulty = replay.difficulty or "stalker",
 		seed = replay.seed,
 		mutators = context.mutators or {},
 		loadout = context.loadout or "default",
 		flame_color = context.flame_color or "amber",
-		practice_floor = context.practice_floor or 1,
+		practice_target = context.practice_target,
 		start_floor = context.start_floor or 1,
 		official_record_eligible = false,
 		replay_mode = true,
@@ -477,13 +546,14 @@ function App:start_pb_replay()
 		sprint_ruleset = context.sprint_ruleset,
 		sprint_seed_pack_id = context.sprint_seed_pack_id,
 		sprint_seed_id = context.sprint_seed_id,
+		pack_version = context.pack_version or replay.metadata.pack_version,
 		category_key = replay.metadata.category_key or context.category_key,
 		difficulty = replay.difficulty or "stalker",
 		seed = replay.seed,
 		mutators = context.mutators or {},
 		loadout = context.loadout or "default",
 		flame_color = context.flame_color or "amber",
-		practice_floor = context.practice_floor or 1,
+		practice_target = context.practice_target,
 		start_floor = context.start_floor or 1,
 		official_record_eligible = false,
 		replay_mode = true,
@@ -491,15 +561,17 @@ function App:start_pb_replay()
 	return Replay.start_playback()
 end
 
-function App:start_practice_floor(floor)
+function App:start_practice_target(target_id)
 	local source = util.deepcopy(self.last_run_config or self:get_effective_config())
 	if source.mode ~= "sprint" then
 		return false
 	end
 	source.sprint_ruleset = "practice"
 	source.official_record_eligible = false
-	source.practice_floor = floor
-	source.start_floor = floor
+	source.practice_target = target_id
+	local practice_info = Sprint.get_practice_target(source.sprint_seed_pack_id, source.sprint_seed_id, target_id, source.difficulty)
+	source.practice_target_label = practice_info.label
+	source.start_floor = practice_info.floor or 1
 	source.replay_mode = false
 	if source.sprint_seed_id then
 		local seed_entry = Sprint.get_seed(source.sprint_seed_pack_id or Sprint.get_default_pack_id(), source.sprint_seed_id)
@@ -511,9 +583,78 @@ function App:start_practice_floor(floor)
 	return true
 end
 
+function App:start_practice_floor(floor)
+	return self:start_practice_target(string.format("floor:%d", floor))
+end
+
+function App:refresh_drill_entries(source_config)
+	local config = source_config or self.last_run_config or self:get_effective_config()
+	if not config or config.mode ~= "sprint" then
+		self.drill_entries = {}
+		self.selected_drill_index = 1
+		return
+	end
+	local pack_id = config.sprint_seed_pack_id or self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id()
+	local seed_id = config.sprint_seed_id or self.settings.selected_sprint_seed_id
+	self.drill_source = {
+		pack_id = pack_id,
+		seed_id = seed_id,
+		difficulty = config.difficulty or self.selected_difficulty,
+	}
+	self.drill_entries = Sprint.list_practice_targets(pack_id, seed_id)
+	self.selected_drill_index = 1
+	for index, target in ipairs(self.drill_entries) do
+		if target.id == (config.practice_target or self:get_practice_target_id()) then
+			self.selected_drill_index = index
+			break
+		end
+	end
+end
+
+function App:open_drill_browser(source_config)
+	self:refresh_drill_entries(source_config)
+	self.screen = "drills"
+end
+
+function App:start_selected_drill_target()
+	local entry = self.drill_entries[self.selected_drill_index]
+	if not entry then
+		return false
+	end
+	return self:start_practice_target(entry.id)
+end
+
+function App:export_sprint_summary(summary, sprint_result, replay_filename)
+	if not summary or summary.mode ~= "sprint" or summary.sprint_ruleset ~= "official" then
+		return false
+	end
+	local lines = {
+		"build_id=" .. Build.get_id(),
+		"category_key=" .. tostring(summary.category_key or ""),
+		"pack_version=" .. tostring(summary.pack_version or ""),
+		"seed=" .. tostring(summary.seed or ""),
+		"difficulty=" .. tostring(summary.difficulty_id or ""),
+		"duration=" .. tostring(summary.duration or 0),
+		"medal=" .. tostring(summary.medal or ""),
+		"best_possible_time=" .. tostring((sprint_result and sprint_result.best_possible_time) or summary.best_possible_time or ""),
+		"timer_start_reason=" .. tostring(summary.timer_start_reason or ""),
+		"replay_file=" .. tostring(replay_filename or ""),
+	}
+	for _, split in ipairs(summary.splits or {}) do
+		lines[#lines + 1] = string.format("split:%s=%.4f", split.id, split.time or 0)
+	end
+	local file = Replay.get_export_dir() .. "/" .. Replay.export_filename(summary.category_key, os.time())
+	return Replay.write_text(file, table.concat(lines, "\n") .. "\n")
+end
+
 function App:advance_sprint_seed(step)
 	local include_random = (self.settings.selected_sprint_ruleset or "official") == "practice"
 	self.settings.selected_sprint_seed_id = Sprint.next_seed_id(self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(), self.settings.selected_sprint_seed_id or "ember_arc", step or 1, include_random)
+	self.settings.selected_sprint_practice_target = Sprint.normalize_practice_target(
+		self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(),
+		self.settings.selected_sprint_seed_id,
+		self.settings.selected_sprint_practice_target or "floor:1"
+	)
 	self:save_settings()
 end
 
@@ -549,8 +690,25 @@ function App:update(dt)
 		self:save_replay_snapshot("pause_save")
 	end
 	if outcome == "dead" then
+		if self.last_run_config and self.last_run_config.mode == "sprint" and self.last_run_config.sprint_ruleset == "practice"
+			and self.settings.runner_practice_auto_restart == true then
+			Replay.stop_recording()
+			self:start_run(self.last_run_config)
+			return
+		end
 		self:record_result("dead")
 	elseif outcome == "victory" then
+		if self.last_run_config and self.last_run_config.mode == "sprint" and self.last_run_config.sprint_ruleset == "practice"
+			and self.settings.runner_practice_auto_restart == true then
+			local summary = self.run:summary()
+			summary.outcome = "victory"
+			local updated_records = Sprint.update_practice_record(self.settings.sprint_practice_records or {}, summary)
+			self.settings.sprint_practice_records = updated_records
+			self:save_settings()
+			Replay.stop_recording()
+			self:start_run(self.last_run_config)
+			return
+		end
 		self:record_result("victory")
 	end
 end
@@ -561,6 +719,7 @@ function App:draw_title()
 	local time = love.timer.getTime()
 	local config = self:get_effective_config()
 	local preview = self:get_preview()
+	local pack = self:get_sprint_pack()
 	local title_alpha = self.settings.title_flicker and (math.sin(time * 2.5) * 0.15 + 0.85) or 1.0
 	local lore = LoreData.fragments
 	local lore_index = math.floor(time / 4) % #lore + 1
@@ -579,18 +738,23 @@ function App:draw_title()
 	draw_centered(lg, "\"" .. lore[lore_index].text .. "\"", height * 0.24, width, { 0.4, 0.42, 0.48, 0.7 })
 
 	local sprint_seed_text = "--"
+	local practice_target_text = "--"
 	if self.selected_mode == "sprint" then
 		sprint_seed_text = self.settings.selected_sprint_ruleset == "official"
 			and Sprint.get_seed_label(self.settings.selected_sprint_pack_id, config.sprint_seed_id)
 			or (self.settings.selected_sprint_seed_id == "random" and "Random Practice" or Sprint.get_seed_label(self.settings.selected_sprint_pack_id, self.settings.selected_sprint_seed_id))
+		practice_target_text = self.settings.selected_sprint_ruleset == "practice"
+			and self:get_practice_target_label(self.settings.selected_sprint_pack_id, self.settings.selected_sprint_seed_id, self:get_practice_target_id())
+			or "--"
 	end
 	local items = {
 		{ key = "start", label = "Start Run" },
 		{ key = "difficulty", label = "Difficulty", value = config.difficulty },
 		{ key = "mode", label = "Mode", value = config.mode },
+		{ key = "sprint_pack", label = "Sprint Pack", value = self.selected_mode == "sprint" and pack.label or "--" },
 		{ key = "sprint_ruleset", label = "Sprint Rules", value = self.selected_mode == "sprint" and (self.settings.selected_sprint_ruleset or "official") or "--" },
 		{ key = "sprint_seed", label = "Sprint Seed", value = sprint_seed_text },
-		{ key = "practice_floor", label = "Practice Floor", value = self.selected_mode == "sprint" and (self.settings.selected_sprint_ruleset == "practice" and tostring(self.settings.selected_sprint_practice_floor or 1) or "--") or "--" },
+		{ key = "practice_target", label = "Practice Target", value = practice_target_text },
 		{ key = "loadout", label = "Loadout", value = config.loadout },
 		{ key = "flame", label = "Flame", value = config.flame_color },
 		{ key = "progression", label = "Progression" },
@@ -601,8 +765,9 @@ function App:draw_title()
 	local start_y = height * 0.33
 	for index, item in ipairs(items) do
 		local disabled = (item.key == "sprint_ruleset" and self.selected_mode ~= "sprint")
+			or (item.key == "sprint_pack" and self.selected_mode ~= "sprint")
 			or (item.key == "sprint_seed" and self.selected_mode ~= "sprint")
-			or (item.key == "practice_floor" and not (self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice"))
+			or (item.key == "practice_target" and not (self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice"))
 			or (item.key == "loadout" and (self.selected_mode == "daily" or self:is_sprint_official()))
 		local text = item.value and string.format("%s: %s", item.label, item.value) or item.label
 		local color = disabled and { 0.46, 0.48, 0.52, 1.0 } or (index == self.title_index and { 1.0, 0.93, 0.35, 1.0 } or { 0.82, 0.84, 0.88, 1.0 })
@@ -623,14 +788,15 @@ function App:draw_title()
 		local record = self:get_sprint_record(config)
 		local seed = Sprint.get_seed(config.sprint_seed_pack_id, config.sprint_seed_id)
 		local best_time = record and record.best_time and format_time(record.best_time) or "none"
-		local best_medal = record and record.medal or "none"
-		draw_centered(lg, string.format("%s  PB %s  Medal %s", seed.label, best_time, best_medal), height * 0.72, width, { 0.94, 0.88, 0.42, 1.0 })
+		local best_medal = record and (record.best_medal or record.medal) or "none"
+		local best_possible = record and record.best_possible_time and format_time(record.best_possible_time) or "--"
+		draw_centered(lg, string.format("%s  PB %s  Medal %s  Best Possible %s", seed.label, best_time, best_medal, best_possible), height * 0.72, width, { 0.94, 0.88, 0.42, 1.0 })
 	else
-		draw_centered(lg, config.mode == "sprint" and string.format("Practice Seed %d  Floor %d", config.seed, config.practice_floor or 1) or ("Seed: " .. tostring(config.seed)), height * 0.72, width, { 0.82, 0.84, 0.88, 1.0 })
+		draw_centered(lg, config.mode == "sprint" and string.format("Practice Seed %d  Target %s", config.seed, config.practice_target_label or self:get_practice_target_label()) or ("Seed: " .. tostring(config.seed)), height * 0.72, width, { 0.82, 0.84, 0.88, 1.0 })
 	end
 	draw_centered(lg, "Mutators: " .. (#mutators > 0 and table.concat(mutators, ", ") or (self:is_sprint_official() and "Locked Off" or "None")), height * 0.77, width, { 0.82, 0.84, 0.88, 1.0 })
 	draw_centered(lg, "Toggle mutators [Z/X/C] base  [B] Blacklight  [I] Ironman", height * 0.82, width, { 0.5, 0.52, 0.58, 1.0 })
-	draw_centered(lg, "Up/Down select  Left/Right adjust  Enter confirm  N seed action", height * 0.87, width, { 0.5, 0.52, 0.58, 1.0 })
+	draw_centered(lg, "Up/Down select  Left/Right adjust  Enter confirm or browse target  N seed action", height * 0.87, width, { 0.5, 0.52, 0.58, 1.0 })
 	draw_centered(lg, "Loadouts: " .. table.concat((function()
 		local values = {}
 		for _, entry in ipairs(loadouts) do values[#values + 1] = entry.id end
@@ -674,7 +840,7 @@ function App:draw_replays()
 			local replay = entry.replay
 			local color = index == self.selected_replay_index and { 1.0, 0.93, 0.35, 1.0 } or { 0.8, 0.82, 0.86, 1.0 }
 			local pb_tag = replay.metadata.pb and " PB" or ""
-			local line = string.format("%s  %s  %s  %s  %.1fs%s", entry.file, replay.difficulty or "stalker", replay.context.mode or "classic", tostring(replay.seed), replay.metadata.duration or 0, pb_tag)
+			local line = string.format("%s  %s  %s  %s  %.1fs%s", entry.file, replay.difficulty or "stalker", entry.mode:gsub("_", " "), tostring(replay.seed), replay.metadata.duration or 0, pb_tag)
 			if index == self.selected_replay_index then
 				line = "> " .. line .. " <"
 			end
@@ -686,6 +852,32 @@ function App:draw_replays()
 		end
 	end
 	draw_centered(lg, "Up/Down select  Left/Right sort  [F] filter  [P] PB-only  Enter plays  Esc returns", height * 0.9, width, { 0.5, 0.52, 0.58, 1.0 })
+end
+
+function App:draw_drills()
+	local lg = love.graphics
+	local width, height = lg.getDimensions()
+	draw_centered(lg, "PRACTICE TARGETS", height * 0.08, width, { 0.92, 0.92, 0.96, 1.0 })
+	if #self.drill_entries == 0 then
+		draw_centered(lg, "No practice targets available for this seed", height * 0.42, width, { 0.72, 0.72, 0.76, 1.0 })
+	else
+		local y = height * 0.22
+		for index, entry in ipairs(self.drill_entries) do
+			local color = index == self.selected_drill_index and { 1.0, 0.93, 0.35, 1.0 } or { 0.8, 0.82, 0.86, 1.0 }
+			local record = self.settings.sprint_practice_records[entry.id]
+			local suffix = record and ("  Best " .. format_time(record.best_time)) or ""
+			local line = string.format("%s  Floor %d%s", entry.label, entry.floor or 1, suffix)
+			if index == self.selected_drill_index then
+				line = "> " .. line .. " <"
+			end
+			draw_centered(lg, line, y, width, color)
+			y = y + 24
+			if y > height * 0.8 then
+				break
+			end
+		end
+	end
+	draw_centered(lg, "Up/Down select  Enter starts  Esc returns", height * 0.9, width, { 0.5, 0.52, 0.58, 1.0 })
 end
 
 function App:draw_result()
@@ -706,14 +898,16 @@ function App:draw_result()
 				local split_text = self.last_sprint_record and self.last_sprint_record.new_best_splits and "new split bests" or "split table stable"
 				draw_centered(lg, string.format("Medal %s  %s  %s", medal, pb_text, split_text), height * 0.44, width, { 0.94, 0.88, 0.42, 1.0 })
 			else
-				draw_centered(lg, "Sprint practice: records and medals disabled", height * 0.44, width, { 0.7, 0.8, 1.0, 1.0 })
+				local best = self.last_summary.practice_target and self.settings.sprint_practice_records[self.last_summary.practice_target]
+				draw_centered(lg, string.format("Sprint practice: %s  Best %s", self.last_summary.practice_target_label or self.last_summary.practice_target or "target", best and format_time(best.best_time) or "none"), height * 0.44, width, { 0.7, 0.8, 1.0, 1.0 })
 			end
 			local y = height * 0.50
 			for index, split in ipairs(self.last_summary.splits or {}) do
 				local delta = split.delta and string.format(" (%+0.2fs)", split.delta) or ""
-				draw_centered(lg, string.format("%s  %s%s", split.label, format_time(split.time), delta), y, width, { 0.78, 0.8, 0.86, 1.0 })
+				local color = split.gold and { 0.98, 0.88, 0.42, 1.0 } or { 0.78, 0.8, 0.86, 1.0 }
+				draw_centered(lg, string.format("%s  %s%s", split.label, format_time(split.time), delta), y, width, color)
 				y = y + 20
-				if index >= 6 then
+				if index >= 8 then
 					break
 				end
 			end
@@ -723,7 +917,7 @@ function App:draw_result()
 	end
 	local footer = "[R] Retry  [N] Seed Action  [S] Save Replay  [P] Progression  [V] Replays  [Enter] Title"
 	if self.last_summary and self.last_summary.mode == "sprint" then
-		footer = footer .. "  [1/2/3] Practice Floors  [G] PB Replay"
+		footer = footer .. "  [1/2/3] Practice Floors  [D] Targets  [G] PB Replay"
 	end
 	draw_centered(lg, footer, height * 0.86, width, { 0.55, 0.58, 0.64, 1.0 })
 end
@@ -740,6 +934,8 @@ function App:draw()
 		self:draw_progression()
 	elseif self.screen == "replays" then
 		self:draw_replays()
+	elseif self.screen == "drills" then
+		self:draw_drills()
 	else
 		self:draw_result()
 	end
@@ -751,22 +947,33 @@ function App:adjust_title_item(direction)
 		self.selected_difficulty = cycle_value(difficulty_cycle, self.selected_difficulty, direction)
 	elseif item == "mode" then
 		self.selected_mode = cycle_value(mode_cycle, self.selected_mode, direction)
+	elseif item == "sprint_pack" and self.selected_mode == "sprint" then
+		local packs = Sprint.list_packs()
+		local ids = {}
+		for _, pack in ipairs(packs) do ids[#ids + 1] = pack.id end
+		self.settings.selected_sprint_pack_id = cycle_value(ids, self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(), direction)
+		self.settings.selected_sprint_seed_id = Sprint.get_seed_by_index(self.settings.selected_sprint_pack_id, 1).id
+		self.settings.selected_sprint_practice_target = Sprint.normalize_practice_target(self.settings.selected_sprint_pack_id, self.settings.selected_sprint_seed_id, self.settings.selected_sprint_practice_target or "floor:1")
 	elseif item == "sprint_ruleset" and self.selected_mode == "sprint" then
 		self.settings.selected_sprint_ruleset = cycle_value(sprint_ruleset_cycle, self.settings.selected_sprint_ruleset or "official", direction)
 		if self.settings.selected_sprint_ruleset == "official" and self.settings.selected_sprint_seed_id == "random" then
 			self.settings.selected_sprint_seed_id = Sprint.get_seed_by_index(self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(), 1).id
 		end
+		self.settings.selected_sprint_practice_target = Sprint.normalize_practice_target(
+			self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(),
+			self.settings.selected_sprint_seed_id,
+			self.settings.selected_sprint_practice_target or "floor:1"
+		)
 	elseif item == "sprint_seed" and self.selected_mode == "sprint" then
 		self:advance_sprint_seed(direction)
 		return
-	elseif item == "practice_floor" and self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice" then
-		local next_floor = (self.settings.selected_sprint_practice_floor or 1) + direction
-		if next_floor < 1 then
-			next_floor = 3
-		elseif next_floor > 3 then
-			next_floor = 1
-		end
-		self.settings.selected_sprint_practice_floor = next_floor
+	elseif item == "practice_target" and self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice" then
+		self.settings.selected_sprint_practice_target = Sprint.next_practice_target(
+			self.settings.selected_sprint_pack_id or Sprint.get_default_pack_id(),
+			self.settings.selected_sprint_seed_id,
+			self:get_practice_target_id(),
+			direction
+		)
 	elseif item == "loadout" and self.selected_mode ~= "daily" and not self:is_sprint_official() then
 		local values = {}
 		for _, entry in ipairs(self:get_available_loadouts()) do values[#values + 1] = entry.id end
@@ -828,6 +1035,8 @@ function App:keypressed(key)
 			local item = title_items[self.title_index]
 			if item == "start" then
 				self:start_run()
+			elseif item == "practice_target" and self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice" then
+				self:open_drill_browser(self:get_effective_config())
 			elseif item == "progression" then
 				self.screen = "progression"
 			elseif item == "replays" then
@@ -872,6 +1081,21 @@ function App:keypressed(key)
 			end
 		elseif key == "escape" then
 			self.screen = "title"
+		end
+		return
+	end
+
+	if self.screen == "drills" then
+		if key == "up" then
+			self.selected_drill_index = math.max(1, self.selected_drill_index - 1)
+		elseif key == "down" then
+			self.selected_drill_index = math.min(#self.drill_entries, self.selected_drill_index + 1)
+		elseif key == "return" then
+			if self:start_selected_drill_target() then
+				self.screen = "play"
+			end
+		elseif key == "escape" then
+			self.screen = self.last_result or "title"
 		end
 		return
 	end
@@ -927,6 +1151,8 @@ function App:keypressed(key)
 	elseif key == "v" then
 		self:refresh_replays()
 		self.screen = "replays"
+	elseif key == "d" and self.last_summary and self.last_summary.mode == "sprint" then
+		self:open_drill_browser(self.last_run_config)
 	elseif (key == "1" or key == "2" or key == "3") and self.last_summary and self.last_summary.mode == "sprint" then
 		self:start_practice_floor(tonumber(key))
 	elseif key == "g" and self.last_summary and self.last_summary.mode == "sprint" then
