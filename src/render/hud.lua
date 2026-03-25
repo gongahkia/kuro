@@ -246,7 +246,10 @@ function HUD:draw(run_state, lg)
 		lg.setColor(0.85, 0.75, 0.4)
 		lg.print("Relics: " .. table.concat(relic_names, ", "), 16, 90)
 	end
-	if run_state.stealth and run_state.stealth:is_crouching() then
+	if run_state.momentum and run_state.momentum:is_sliding() then
+		lg.setColor(0.4, 0.95, 0.8)
+		lg.print("[sliding]", 230, 12)
+	elseif run_state.stealth and run_state.stealth:is_crouching() then
 		lg.setColor(0.5, 0.7, 0.9)
 		lg.print("[crouching]", 230, 12)
 	end
@@ -365,7 +368,26 @@ function HUD:draw(run_state, lg)
 		lg.setColor(0.95, 0.85, 0.42)
 		lg.print(string.format("Guide %.0f deg", math.deg(delta)), width - 180, height - 34)
 	end
+	self:draw_velocity(run_state, lg)
 	self:draw_automap(run_state, lg)
+end
+
+function HUD:draw_velocity(run_state, lg)
+	if not run_state.momentum then return end
+	if run_state.settings and run_state.settings.runner_show_velocity == false then return end
+	local width, height = lg.getDimensions()
+	local speed = run_state.momentum:get_speed()
+	local r, g, b = 0.92, 0.94, 0.97
+	if speed >= 8 then r, g, b = 0.95, 0.3, 0.25
+	elseif speed >= 5 then r, g, b = 0.95, 0.6, 0.2
+	elseif speed >= 3 then r, g, b = 0.95, 0.9, 0.3 end
+	lg.setColor(r, g, b)
+	lg.print(string.format("%.1f u/s", speed), width - 140, 12)
+	local tech = run_state.momentum:get_technique()
+	if tech ~= "none" then
+		lg.setColor(0.4, 0.95, 0.8)
+		lg.print(tech, width - 140, 30)
+	end
 end
 
 function HUD:draw_pause(run_state, lg)
