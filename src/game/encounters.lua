@@ -14,6 +14,7 @@ local riddle_pool = {
 	{ clue = "Face where shadows are longest.", answer = "west", reward = "torch" },
 	{ clue = "Look toward the ceiling's weep.", answer = "north", reward = "light" },
 	{ clue = "Turn to the corridor that exhales.", answer = "east", reward = "flare" },
+	{ clue = "Breathe where the shrine falls silent.", answer = "south", reward = "tonic" },
 }
 
 function Encounters.build_pool(floor, has_threat)
@@ -55,7 +56,11 @@ Encounters.handlers["lore"] = function(run, _node)
 	run.director.lore_index = run.director.lore_index + 1
 	local entry = lore[((run.director.lore_index - 1) % #lore) + 1]
 	run:push_message("Lore " .. run.director.lore_index .. ": " .. entry.text)
-	if run.codex then run.codex:discover_fragment(entry.id) end
+	if run.codex then
+		run.codex:discover_fragment(entry.id)
+		run:refresh_secret_clues()
+	end
+	run:restore_sanity(8, "The fragment steadies your thoughts.")
 	if run.mutators.echoes then run.player.flares = run.player.flares + 1 end
 end
 
@@ -69,11 +74,13 @@ end
 Encounters.handlers["shrine"] = function(run, _node)
 	run.player.health = math.min(run.player.max_health, run.player.health + 2)
 	run.player.light_charge = run.player.max_light_charge
+	run:restore_sanity(24)
 	run:push_message("A shrine quiets the panic in your chest.")
 end
 
 Encounters.handlers["revelation"] = function(run, _node)
 	run:reveal_path_to_objective()
+	run:restore_sanity(10, "The route feels briefly certain.")
 end
 
 Encounters.handlers["ambush"] = function(run, node)
@@ -125,7 +132,7 @@ Encounters.handlers["riddle"] = function(run, _node)
 end
 
 Encounters.handlers["sacrifice"] = function(run, _node)
-	run:push_message("[altar] Sacrifice 2 HP for full light? Interact to accept.")
+	run:push_message("[altar] Sacrifice 2 HP for full light and clarity? Interact to accept.")
 	run.pending_sacrifice = { cost = 2 }
 end
 
@@ -140,7 +147,8 @@ Encounters.handlers["gamble_shrine"] = function(run, node)
 				if run.relics:add(relic) then
 					run:push_message("[shimmer] the shrine yields: " .. relic.label)
 				else
-					run:push_message("[shimmer] the shrine yields nothing. Your hands are full.")
+					run:add_consumable("calming_tonic")
+					run:push_message("[shimmer] your relic slots are full. A tonic takes its place.")
 				end
 			end
 		else
@@ -164,7 +172,9 @@ Encounters.handlers["ghost_npc"] = function(run, _node)
 		run.director.lore_index = run.director.lore_index + 1
 		local entry = lore[((run.director.lore_index - 1) % #lore) + 1]
 		run.codex:discover_fragment(entry.id)
+		run:refresh_secret_clues()
 	end
+	run:restore_sanity(12, "The apparition leaves a strange calm behind.")
 end
 
 return Encounters
