@@ -61,9 +61,9 @@ make test
 
 - `Sanity`: the only non-HP pressure track; low sanity distorts vision, weakens automap clarity, and reduces light recovery
 - `Consumable belt`: `Calming Tonic`, `Speed Tonic`, and `Ward Charge` live in 3 quick-use slots
-- `Sprint`: three official seed packs, authored route manifests, gold splits, projected finish readouts, PB ghosts, floor practice, and drill practice
+- `Sprint`: three official seed packs, authored minimum-torch lines, dark lanes, flare checkpoints, burn gates, soft pillar-route guidance, gold splits, projected finish readouts, PB ghosts, floor practice, and drill practice
 - `Progression`: unlocks opt-in mutators, the `Scout` loadout, and cosmetic flame colors
-- `Replays`: record runs, save them locally, auto-save Sprint PBs, export official finish summaries, and replay them from the title screen
+- `Replays`: record runs, save them locally, auto-save every official Sprint finish plus Sprint PB mirrors, export paired text and JSON official summaries, and replay them from the title screen
 - `Speed tech`: `Burn Dash` converts charged burst releases into movement, and `Flare Boost` rewards routing through freshly thrown flares on authored route lines
 
 ## Structure
