@@ -1,9 +1,11 @@
 local util = require("src.core.util")
+local Build = require("src.core.build")
 
 local Replay = {}
 
-local FILE_VERSION = "2.0"
+local FILE_VERSION = "3.0"
 local REPLAY_DIR = "replays"
+local EXPORT_DIR = "exports"
 local GHOST_SAMPLE_INTERVAL = 0.25
 
 local recording = false
@@ -33,7 +35,12 @@ local function new_replay_data(seed, difficulty)
 			seed_id = "",
 			ruleset = "",
 			medal = "",
+			build_id = Build.get_id(),
+			pack_version = "",
+			timer_start_reason = "",
+			practice_target = "",
 			tech_usage = {},
+			route_events = {},
 		},
 	}
 end
@@ -146,11 +153,12 @@ local function serialize(data)
 		"DURATION:" .. tostring(metadata.duration or 0),
 		"TOTAL_INPUTS:" .. tostring(metadata.total_inputs or #data.inputs),
 	}
-	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal" }) do
+	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal", "build_id", "pack_version", "timer_start_reason", "practice_target" }) do
 		lines[#lines + 1] = string.format("META:%s=%s", key, tostring(metadata[key] or ""))
 	end
 	serialize_path(lines, "", data.context or {}, "CONTEXT")
 	serialize_path(lines, "", metadata.tech_usage or {}, "TECH")
+	serialize_path(lines, "", metadata.route_events or {}, "ROUTE")
 	lines[#lines + 1] = "SPLITS:"
 	for _, split in ipairs(data.splits or {}) do
 		lines[#lines + 1] = string.format("%s|%s|%s|%.4f|%s", split.id or "", split.label or "", tostring(split.floor or ""), split.time or 0, split.delta ~= nil and tostring(split.delta) or "")
@@ -286,6 +294,11 @@ local function deserialize_text(contents)
 					if path then
 						assign_nested(replay.metadata.tech_usage, path, raw_value)
 					end
+				elseif key == "ROUTE" then
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.metadata.route_events, path, raw_value)
+					end
 				end
 			end
 		end
@@ -368,12 +381,17 @@ function Replay.set_summary(summary)
 		return
 	end
 	replay_data.splits = deep_copy(summary.splits or {})
+	replay_data.metadata.duration = summary.duration or replay_data.metadata.duration
 	replay_data.metadata.category_key = summary.category_key or replay_data.metadata.category_key
 	replay_data.metadata.seed_pack_id = summary.sprint_seed_pack_id or replay_data.metadata.seed_pack_id
 	replay_data.metadata.seed_id = summary.sprint_seed_id or replay_data.metadata.seed_id
 	replay_data.metadata.ruleset = summary.sprint_ruleset or replay_data.metadata.ruleset
 	replay_data.metadata.medal = summary.medal or replay_data.metadata.medal
+	replay_data.metadata.pack_version = summary.pack_version or replay_data.metadata.pack_version
+	replay_data.metadata.timer_start_reason = summary.timer_start_reason or replay_data.metadata.timer_start_reason
+	replay_data.metadata.practice_target = summary.practice_target or replay_data.metadata.practice_target
 	replay_data.metadata.tech_usage = deep_copy(summary.tech_usage or {})
+	replay_data.metadata.route_events = deep_copy(summary.route_events or {})
 end
 
 function Replay.set_metadata(values)
@@ -383,6 +401,8 @@ function Replay.set_metadata(values)
 	for key, value in pairs(values) do
 		if key == "tech_usage" and type(value) == "table" then
 			replay_data.metadata.tech_usage = deep_copy(value)
+		elseif key == "route_events" and type(value) == "table" then
+			replay_data.metadata.route_events = deep_copy(value)
 		else
 			replay_data.metadata[key] = value
 		end
@@ -521,6 +541,23 @@ function Replay.list_replays()
 		return left > right
 	end)
 	return items
+end
+
+function Replay.write_text(relative_path, contents)
+	local fs = get_filesystem()
+	local directory = relative_path:match("^(.+)/[^/]+$")
+	if directory then
+		fs.create_directory(directory)
+	end
+	return fs.write(relative_path, contents)
+end
+
+function Replay.export_filename(category_key, timer_value)
+	return string.format("%s_%s.txt", sanitize_filename(category_key or "sprint_export"), os.date("%Y%m%d_%H%M%S", timer_value or os.time()))
+end
+
+function Replay.get_export_dir()
+	return EXPORT_DIR
 end
 
 return Replay
