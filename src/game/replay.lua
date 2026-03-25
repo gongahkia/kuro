@@ -1,13 +1,17 @@
+local util = require("src.core.util")
+
 local Replay = {}
 
-local FILE_VERSION = "1.0"
+local FILE_VERSION = "2.0"
 local REPLAY_DIR = "replays"
+local GHOST_SAMPLE_INTERVAL = 0.25
 
 local recording = false
 local playing = false
 local playback_index = 1
 local playback_time = 0
 local current_recording_time = 0
+local last_ghost_sample_time = -GHOST_SAMPLE_INTERVAL
 
 local function new_replay_data(seed, difficulty)
 	return {
@@ -16,10 +20,20 @@ local function new_replay_data(seed, difficulty)
 		difficulty = difficulty or "stalker",
 		context = {},
 		inputs = {},
+		splits = {},
+		ghost_frames = {},
 		metadata = {
 			recording_date = os.date("%Y-%m-%d %H:%M:%S"),
 			duration = 0,
 			total_inputs = 0,
+			pb = false,
+			restart_reason = "",
+			category_key = "",
+			seed_pack_id = "",
+			seed_id = "",
+			ruleset = "",
+			medal = "",
+			tech_usage = {},
 		},
 	}
 end
@@ -30,11 +44,7 @@ local function deep_copy(value)
 	if type(value) ~= "table" then
 		return value
 	end
-	local copy = {}
-	for key, inner in pairs(value) do
-		copy[deep_copy(key)] = deep_copy(inner)
-	end
-	return copy
+	return util.deepcopy(value)
 end
 
 local function get_filesystem()
@@ -111,27 +121,44 @@ local function normalize_filename(filename)
 	return filename
 end
 
-local function serialize_context(lines, prefix, value)
+local function sanitize_filename(value)
+	return tostring(value or "replay"):gsub("[^%w%-_]+", "_")
+end
+
+local function serialize_path(lines, prefix, value, header)
 	if type(value) ~= "table" then
-		lines[#lines + 1] = string.format("CONTEXT:%s=%s", prefix, tostring(value))
+		lines[#lines + 1] = string.format("%s:%s=%s", header, prefix, tostring(value))
 		return
 	end
 	for key, inner in pairs(value) do
-		local next_prefix = prefix ~= "" and (prefix .. "." .. key) or key
-		serialize_context(lines, next_prefix, inner)
+		local next_prefix = prefix ~= "" and (prefix .. "." .. key) or tostring(key)
+		serialize_path(lines, next_prefix, inner, header)
 	end
 end
 
 local function serialize(data)
+	local metadata = data.metadata or {}
 	local lines = {
 		"VERSION:" .. tostring(data.version or FILE_VERSION),
 		"SEED:" .. tostring(data.seed or ""),
 		"DIFFICULTY:" .. tostring(data.difficulty or "stalker"),
-		"DATE:" .. tostring(data.metadata.recording_date or ""),
-		"DURATION:" .. tostring(data.metadata.duration or 0),
-		"TOTAL_INPUTS:" .. tostring(data.metadata.total_inputs or #data.inputs),
+		"DATE:" .. tostring(metadata.recording_date or ""),
+		"DURATION:" .. tostring(metadata.duration or 0),
+		"TOTAL_INPUTS:" .. tostring(metadata.total_inputs or #data.inputs),
 	}
-	serialize_context(lines, "", data.context or {})
+	for _, key in ipairs({ "pb", "restart_reason", "category_key", "seed_pack_id", "seed_id", "ruleset", "medal" }) do
+		lines[#lines + 1] = string.format("META:%s=%s", key, tostring(metadata[key] or ""))
+	end
+	serialize_path(lines, "", data.context or {}, "CONTEXT")
+	serialize_path(lines, "", metadata.tech_usage or {}, "TECH")
+	lines[#lines + 1] = "SPLITS:"
+	for _, split in ipairs(data.splits or {}) do
+		lines[#lines + 1] = string.format("%s|%s|%s|%.4f|%s", split.id or "", split.label or "", tostring(split.floor or ""), split.time or 0, split.delta ~= nil and tostring(split.delta) or "")
+	end
+	lines[#lines + 1] = "GHOST:"
+	for _, frame in ipairs(data.ghost_frames or {}) do
+		lines[#lines + 1] = string.format("%.4f|%d|%.4f|%.4f", frame.timestamp or 0, frame.floor or 1, frame.x or 0, frame.y or 0)
+	end
 	lines[#lines + 1] = "INPUTS:"
 	for _, input in ipairs(data.inputs or {}) do
 		lines[#lines + 1] = string.format("%s|%s|%.4f", input.type, input.key, input.timestamp)
@@ -139,26 +166,43 @@ local function serialize(data)
 	return table.concat(lines, "\n")
 end
 
-local function deserialize(contents)
+local function deserialize_lua(contents)
+	if not contents or not contents:match("^return%s+") then
+		return nil
+	end
+	local chunk, err = load(contents)
+	if not chunk then
+		return nil, err
+	end
+	local ok, data = pcall(chunk)
+	if ok and type(data) == "table" then
+		return data
+	end
+	return nil
+end
+
+local function deserialize_text(contents)
 	if not contents or contents == "" then
 		return nil
 	end
 
 	local replay = new_replay_data(nil, "stalker")
 	replay.metadata.recording_date = ""
-	local parsing_inputs = false
+	local section = nil
 
 	local function coerce(value)
 		if value == "true" then
 			return true
 		elseif value == "false" then
 			return false
+		elseif value == "" then
+			return ""
 		end
 		return tonumber(value) or value
 	end
 
-	local function assign_context(path, value)
-		local current = replay.context
+	local function assign_nested(target, path, value)
+		local current = target
 		local parts = {}
 		for part in path:gmatch("[^%.]+") do
 			parts[#parts + 1] = part
@@ -176,9 +220,34 @@ local function deserialize(contents)
 	end
 
 	for line in contents:gmatch("[^\r\n]+") do
-		if line == "INPUTS:" then
-			parsing_inputs = true
-		elseif parsing_inputs then
+		if line == "SPLITS:" then
+			section = "splits"
+		elseif line == "GHOST:" then
+			section = "ghost"
+		elseif line == "INPUTS:" then
+			section = "inputs"
+		elseif section == "splits" then
+			local id, label, floor, time_value, delta = line:match("([^|]*)|([^|]*)|([^|]*)|([^|]*)|?(.*)")
+			if id and label and floor and time_value then
+				replay.splits[#replay.splits + 1] = {
+					id = id,
+					label = label,
+					floor = tonumber(floor) or 1,
+					time = tonumber(time_value) or 0,
+					delta = delta ~= "" and (tonumber(delta) or delta) or nil,
+				}
+			end
+		elseif section == "ghost" then
+			local timestamp, floor, x, y = line:match("([^|]+)|([^|]+)|([^|]+)|([^|]+)")
+			if timestamp and floor and x and y then
+				replay.ghost_frames[#replay.ghost_frames + 1] = {
+					timestamp = tonumber(timestamp) or 0,
+					floor = tonumber(floor) or 1,
+					x = tonumber(x) or 0,
+					y = tonumber(y) or 0,
+				}
+			end
+		elseif section == "inputs" then
 			local input_type, key, timestamp = line:match("([^|]+)|([^|]+)|([%d%.%-]+)")
 			if input_type and key and timestamp then
 				replay.inputs[#replay.inputs + 1] = {
@@ -202,10 +271,20 @@ local function deserialize(contents)
 					replay.metadata.duration = tonumber(value) or 0
 				elseif key == "TOTAL_INPUTS" then
 					replay.metadata.total_inputs = tonumber(value) or 0
+				elseif key == "META" then
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.metadata, path, raw_value)
+					end
 				elseif key == "CONTEXT" then
-					local path, raw_value = value:match("^([%w%.]+)=(.+)$")
-					if path and raw_value then
-						assign_context(path, raw_value)
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.context, path, raw_value)
+					end
+				elseif key == "TECH" then
+					local path, raw_value = value:match("^([%w_%.]+)=(.*)$")
+					if path then
+						assign_nested(replay.metadata.tech_usage, path, raw_value)
 					end
 				end
 			end
@@ -216,6 +295,14 @@ local function deserialize(contents)
 	return replay
 end
 
+local function deserialize(contents)
+	local replay = deserialize_lua(contents)
+	if replay then
+		return replay
+	end
+	return deserialize_text(contents)
+end
+
 function Replay.init()
 	local fs = get_filesystem()
 	fs.create_directory(REPLAY_DIR)
@@ -224,6 +311,7 @@ function Replay.init()
 	playback_index = 1
 	playback_time = 0
 	current_recording_time = 0
+	last_ghost_sample_time = -GHOST_SAMPLE_INTERVAL
 	replay_data = new_replay_data(nil, nil)
 end
 
@@ -235,6 +323,7 @@ function Replay.start_recording(seed, difficulty, context)
 	playback_index = 1
 	playback_time = 0
 	current_recording_time = 0
+	last_ghost_sample_time = -GHOST_SAMPLE_INTERVAL
 end
 
 function Replay.stop_recording()
@@ -255,6 +344,49 @@ function Replay.record_key_state(key, is_down, timestamp)
 		key = key,
 		timestamp = timestamp or current_recording_time,
 	}
+end
+
+function Replay.record_ghost_frame(timestamp, floor, x, y)
+	if not recording then
+		return
+	end
+	local capture_time = timestamp or current_recording_time
+	if capture_time - last_ghost_sample_time < GHOST_SAMPLE_INTERVAL then
+		return
+	end
+	last_ghost_sample_time = capture_time
+	replay_data.ghost_frames[#replay_data.ghost_frames + 1] = {
+		timestamp = capture_time,
+		floor = floor or 1,
+		x = x or 0,
+		y = y or 0,
+	}
+end
+
+function Replay.set_summary(summary)
+	if not replay_data or not summary then
+		return
+	end
+	replay_data.splits = deep_copy(summary.splits or {})
+	replay_data.metadata.category_key = summary.category_key or replay_data.metadata.category_key
+	replay_data.metadata.seed_pack_id = summary.sprint_seed_pack_id or replay_data.metadata.seed_pack_id
+	replay_data.metadata.seed_id = summary.sprint_seed_id or replay_data.metadata.seed_id
+	replay_data.metadata.ruleset = summary.sprint_ruleset or replay_data.metadata.ruleset
+	replay_data.metadata.medal = summary.medal or replay_data.metadata.medal
+	replay_data.metadata.tech_usage = deep_copy(summary.tech_usage or {})
+end
+
+function Replay.set_metadata(values)
+	if not replay_data or type(values) ~= "table" then
+		return
+	end
+	for key, value in pairs(values) do
+		if key == "tech_usage" and type(value) == "table" then
+			replay_data.metadata.tech_usage = deep_copy(value)
+		else
+			replay_data.metadata[key] = value
+		end
+	end
 end
 
 function Replay.update(dt)
@@ -278,6 +410,10 @@ function Replay.save(filename)
 	return fs.write(path, serialize(replay_data))
 end
 
+function Replay.pb_filename(category_key)
+	return "pb_" .. sanitize_filename(category_key) .. ".txt"
+end
+
 function Replay.load(filename)
 	local fs = get_filesystem()
 	local path = filename:match("^" .. REPLAY_DIR .. "/") and filename or (REPLAY_DIR .. "/" .. normalize_filename(filename))
@@ -294,6 +430,7 @@ function Replay.load(filename)
 	playback_index = 1
 	playback_time = 0
 	current_recording_time = 0
+	last_ghost_sample_time = -GHOST_SAMPLE_INTERVAL
 	return true
 end
 
@@ -353,6 +490,14 @@ end
 
 function Replay.get_context()
 	return replay_data.context
+end
+
+function Replay.get_metadata()
+	return replay_data.metadata
+end
+
+function Replay.get_data()
+	return replay_data
 end
 
 function Replay.get_playback_progress()
