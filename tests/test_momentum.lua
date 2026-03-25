@@ -90,4 +90,21 @@ return {
 		assert(m:get_speed() == 0, "expected zero after reset")
 		assert(m.chain_bonus == 1.0, "expected chain reset")
 	end,
+	["momentum air strafe adds lateral velocity"] = function()
+		local m = Momentum.new()
+		local p = make_player(0) -- facing east
+		-- get up to speed and jump
+		for _ = 1, 30 do
+			m:update(1/60, make_input({ move = 1 }), p, nil)
+		end
+		m:request_jump()
+		m:update(1/60, make_input({ move = 1 }), p, nil)
+		assert(m:is_airborne(), "expected airborne")
+		local before_vy = m.vy
+		-- apply turn input during air (should add lateral velocity)
+		for _ = 1, 10 do
+			m:update(1/60, make_input({ turn = 1 }), p, nil)
+		end
+		assert(math.abs(m.vy - before_vy) > 0.01, "expected lateral velocity change from air strafe")
+	end,
 }
