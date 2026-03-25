@@ -58,11 +58,36 @@ end
 
 local function standard_route(minimum_room, bonus_room, dark_from, dark_to, flare_from, flare_to, burn_from, burn_to)
 	return {
-		minimum_torch_room = minimum_room,
-		bonus_room = bonus_room,
-		dark_lane = { from_candidate = dark_from, to_main = dark_to },
-		flare_line = { from_main = flare_from, to_candidate = flare_to },
-		burn_lane = { from_candidate = burn_from, to_main = burn_to },
+		minimum_torch = {
+			pickup_room = minimum_room,
+			bonus_room = bonus_room,
+			torch_budget = 1,
+			bailout_room = bonus_room,
+			path_from_main = math.max(1, math.min(2, minimum_room)),
+		},
+		dark_lane = {
+			from_candidate = dark_from,
+			to_main = dark_to,
+			drain_mult = 1.7,
+			bailout_room = bonus_room,
+			visibility_ceiling = 0.96,
+		},
+		flare_line = {
+			from_main = flare_from,
+			to_candidate = flare_to,
+			checkpoint_count = 2,
+			boost_window = 1.1,
+			boost_extension = 0.32,
+			speed_mult = 1.46,
+		},
+		burn_lane = {
+			from_candidate = burn_from,
+			to_main = burn_to,
+			gate_count = 2,
+			min_charge = 0.72,
+			dash_extension = 0.08,
+			light_refund = 4,
+		},
 	}
 end
 
@@ -73,6 +98,9 @@ local function boss_route(primary_pillar, secondary_pillar, anchor_order, weaken
 			secondary_pillar = secondary_pillar,
 			anchor_order = anchor_order,
 			weaken_bonus = weaken_bonus,
+			hazard_mult = 0.76,
+			anchor_range_bonus = 0.7,
+			anchor_restore = 12,
 		},
 	}
 end
@@ -129,7 +157,7 @@ local packs = {
 	black_flame_circuit = {
 		id = "black_flame_circuit",
 		label = "Black Flame Circuit",
-		version = "1.0.0",
+		version = "1.1.0",
 		seeds = {
 			make_seed("ember_arc", "Ember Arc", 41017, medals(
 				{ bronze = 210, silver = 185, gold = 160, black_flame = 142 },
@@ -172,7 +200,7 @@ local packs = {
 	ash_spine_trials = {
 		id = "ash_spine_trials",
 		label = "Ash Spine Trials",
-		version = "1.0.0",
+		version = "1.1.0",
 		seeds = {
 			make_seed("sinder_step", "Cinder Step", 21551, medals(
 				{ bronze = 214, silver = 189, gold = 164, black_flame = 146 },
@@ -215,7 +243,7 @@ local packs = {
 	obsidian_descent = {
 		id = "obsidian_descent",
 		label = "Obsidian Descent",
-		version = "1.0.0",
+		version = "1.1.0",
 		seeds = {
 			make_seed("black_glint", "Black Glint", 64217, medals(
 				{ bronze = 212, silver = 188, gold = 163, black_flame = 145 },
@@ -299,6 +327,36 @@ local function ordered_splits(splits)
 	return ordered
 end
 
+local function segment_rows(best_splits, current_splits)
+	local best_index = split_index(best_splits)
+	local current_ordered = ordered_splits(current_splits)
+	local rows = {}
+	local previous_current = 0
+	local previous_best = 0
+	for _, split in ipairs(current_ordered) do
+		local best = best_index[split.id]
+		local segment_time = math.max(0, (split.time or 0) - previous_current)
+		local best_segment_time = best and best.time and math.max(0, best.time - previous_best) or nil
+		local save = best_segment_time and math.max(0, segment_time - best_segment_time) or 0
+		rows[#rows + 1] = {
+			id = split.id,
+			label = split.label,
+			floor = split.floor,
+			time = split.time,
+			delta = split.delta,
+			gold = split.gold == true,
+			segment_time = segment_time,
+			best_segment_time = best_segment_time,
+			save = save,
+		}
+		previous_current = split.time or previous_current
+		if best and best.time then
+			previous_best = best.time
+		end
+	end
+	return rows
+end
+
 function Sprint.get_default_pack_id()
 	return "black_flame_circuit"
 end
@@ -320,7 +378,7 @@ end
 
 function Sprint.get_pack_version(pack_id)
 	local pack = get_pack_or_default(pack_id)
-	return pack.version or "1.0.0"
+	return pack.version or "1.1.0"
 end
 
 function Sprint.get_seed(pack_id, seed_id)
@@ -605,6 +663,37 @@ function Sprint.projected_finish(best_splits, current_splits, current_time)
 	return projected, projected - best_possible
 end
 
+function Sprint.compute_projected_saves(best_splits, current_splits, limit)
+	local rows = segment_rows(best_splits, current_splits)
+	table.sort(rows, function(left, right)
+		if left.save == right.save then
+			return (left.time or 0) > (right.time or 0)
+		end
+		return left.save > right.save
+	end)
+	local projected = {}
+	local max_items = limit or 3
+	for _, row in ipairs(rows) do
+		if row.save and row.save > 0 then
+			projected[#projected + 1] = {
+				id = row.id,
+				label = row.label,
+				save = row.save,
+				segment_time = row.segment_time,
+				best_segment_time = row.best_segment_time,
+			}
+			if #projected >= max_items then
+				break
+			end
+		end
+	end
+	return projected
+end
+
+function Sprint.get_split_rows(best_splits, current_splits)
+	return segment_rows(best_splits, current_splits)
+end
+
 function Sprint.update_record(records, summary, replay_file)
 	records = records or {}
 	if not summary or summary.mode ~= "sprint" or summary.sprint_ruleset ~= "official" or summary.outcome ~= "victory" or not summary.official_record_eligible then
@@ -652,6 +741,7 @@ function Sprint.update_record(records, summary, replay_file)
 	record.best_medal = best_medal
 	record.medal = best_medal
 	record.pack_version = summary.pack_version or record.pack_version
+	record.projected_saves = Sprint.compute_projected_saves(best_splits, summary.splits or {}, 3)
 	if replay_file then
 		record.pb_replay = replay_file
 	elseif new_pb then
@@ -670,6 +760,7 @@ function Sprint.update_record(records, summary, replay_file)
 		record = util.deepcopy(record),
 		category_key = key,
 		gold_splits = gold_splits,
+		projected_saves = util.deepcopy(record.projected_saves or {}),
 	}
 end
 
