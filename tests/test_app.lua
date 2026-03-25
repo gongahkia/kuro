@@ -108,13 +108,23 @@ return {
 		local key = "sprint:stalker:black_flame_circuit:ember_arc"
 		assert(app.settings.sprint_records[key].best_time == 170, "expected stored sprint pb")
 		assert(files["replays/pb_sprint_stalker_black_flame_circuit_ember_arc.txt"], "expected autosaved pb replay")
+		local found_finish_replay = false
 		local found_export = false
+		local found_json_export = false
 		for path in pairs(files) do
+			if path:match("^replays/run_") then
+				found_finish_replay = true
+			end
 			if path:match("^exports/") then
 				found_export = true
 			end
+			if path:match("^exports/.+%.json$") then
+				found_json_export = true
+			end
 		end
+		assert(found_finish_replay, "expected saved official finish replay")
 		assert(found_export, "expected sprint export file")
+		assert(found_json_export, "expected sprint json export file")
 	end,
 
 	["app practice sprint wins leave official records untouched"] = function()
