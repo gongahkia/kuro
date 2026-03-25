@@ -17,3 +17,7 @@ Kuro originally shipped as a terminal survival roguelike. The implementation is 
   - Leeches dim the player's light.
   - Umbra controls space with summons and hazards.
 - The new version keeps those beats but translates them into a real-time first-person game with light as the primary weapon.
+- Sprint mode now treats those same systems as route-mastery surfaces instead of side content:
+  - official packs use curated seeds and authored shortcuts
+  - time saves come from torch economy, sanity dives, flare lines, Burn Dash lanes, and pillar-route choices
+  - practice targets support both full-floor starts and focused drill starts on authored route nodes
