@@ -122,6 +122,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			pillars_destroyed = 0,
 			burn_dashes = 0,
 			flare_boosts = 0,
+			propulsions = 0,
 		},
 		director = {
 			threat_remaining = 0,
@@ -1656,20 +1657,28 @@ end
 
 function Run:use_light(dt)
 	self.player.fire_cooldown = math.max(0, self.player.fire_cooldown - dt)
+	local propulsion_mode = self.keys.f and self.keys.s -- backward + fire = propulsion
 	if self.keys.f and self.player.fire_cooldown <= 0 and self.player.light_charge > 4 then
 		self.player.light_charge = math.max(0, self.player.light_charge - 24 * dt)
 		self.player.fire_cooldown = 0.04
-		self:try_damage_pillars_in_cone(4.0, math.rad(22), 18 * dt)
-		for _, enemy in ipairs(self.world.enemies) do
-			if enemy.alive ~= false and weapon_cone_hit(self, enemy) then
-				enemy.health = enemy.health - 28 * dt
-				enemy.alert_time = 2.2
-				if enemy.kind == "leech" then
-					enemy.retreat_time = 1.1
-				end
-				if enemy.health <= 0 then
-					self:handle_enemy_death(enemy)
-					self:push_message(enemy.kind .. " burned away.")
+		if propulsion_mode then
+			self.momentum:set_propulsion(4.0)
+			self.stats.propulsions = (self.stats.propulsions or 0) + 1
+		end
+		local damage_mult = propulsion_mode and 0.5 or 1.0
+		self:try_damage_pillars_in_cone(4.0, math.rad(22), 18 * dt * damage_mult)
+		if not (self.category == "pacifist") then
+			for _, enemy in ipairs(self.world.enemies) do
+				if enemy.alive ~= false and weapon_cone_hit(self, enemy) then
+					enemy.health = enemy.health - 28 * dt * damage_mult
+					enemy.alert_time = 2.2
+					if enemy.kind == "leech" then
+						enemy.retreat_time = 1.1
+					end
+					if enemy.health <= 0 then
+						self:handle_enemy_death(enemy)
+						self:push_message(enemy.kind .. " burned away.")
+					end
 				end
 			end
 		end
