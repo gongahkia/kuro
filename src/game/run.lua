@@ -184,6 +184,9 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			split_index = {},
 			last_split_delta = nil,
 			pb_total_time = options.pb_total_time,
+			pb_pack_version = options.pb_pack_version or "",
+			pack_version_mismatch = options.pack_version_mismatch == true,
+			mixed_split_versions = options.mixed_split_versions == true,
 			pb_splits = util.deepcopy(options.pb_splits or {}),
 			best_possible_time = options.best_possible_time,
 			ghost_compare = {
@@ -301,6 +304,9 @@ function Run:summary()
 		best_possible_time = self.best_possible_time,
 		timer_start_reason = self.timer_start_reason,
 		projected_saves = Sprint.compute_projected_saves(self.pb_splits, self.splits, 3),
+		pb_pack_version = self.pb_pack_version,
+		pack_version_mismatch = self.pack_version_mismatch == true,
+		mixed_split_versions = self.mixed_split_versions == true,
 		tech_usage = {
 			burn_dashes = self.stats.burn_dashes or 0,
 			flare_boosts = self.stats.flare_boosts or 0,
