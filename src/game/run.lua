@@ -147,9 +147,9 @@ function Run.new(difficulty, seed, mutators, settings, options)
 			angle = 0,
 			height = 0.55,
 			radius = 0.18,
-			move_speed = 4.0,
-			strafe_speed = 3.6,
-			turn_speed = 2.6,
+			move_speed = 5.2,
+			strafe_speed = 4.6,
+			turn_speed = 2.8,
 			max_health = starting_health,
 			health = starting_health,
 			max_light_charge = 100 + (mutators and mutators.embers and 10 or 0),
@@ -1122,16 +1122,16 @@ function Run:update_player(dt)
 	if self.keys.s then
 		move = move - 1
 	end
-	if self.keys.q then
+	if self.keys.a or self.keys.q then
 		strafe = strafe - 1
 	end
-	if self.keys.c then
+	if self.keys.d or self.keys.c then
 		strafe = strafe + 1
 	end
-	if self.keys.a then
+	if self.keys.left or self.keys.k then
 		turn = turn - 1
 	end
-	if self.keys.d then
+	if self.keys.right or self.keys.l then
 		turn = turn + 1
 	end
 
