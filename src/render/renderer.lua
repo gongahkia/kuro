@@ -10,6 +10,7 @@ local palette = {
 	floor = { 0.06, 0.05, 0.05, 1.0 },
 	wall = { 0.22, 0.26, 0.34, 1.0 },
 	door = { 0.42, 0.36, 0.24, 1.0 },
+	shortcut = { 0.72, 0.68, 0.26, 1.0 },
 	torch = { 1.0, 0.74, 0.26, 1.0 },
 	shrine = { 0.46, 0.95, 0.72, 1.0 },
 	exit = { 0.35, 0.75, 0.95, 1.0 },
@@ -33,6 +34,7 @@ local palette = {
 	blood_trail = { 0.55, 0.12, 0.10, 1.0 },
 	pillar = { 0.66, 0.64, 0.58, 1.0 },
 	blacklight = { 0.58, 0.72, 1.0, 0.42 },
+	sprint_marker = { 0.82, 0.9, 0.42, 1.0 },
 }
 
 local flame_palette = {
@@ -180,9 +182,9 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 			end
 		else
 			local is_secret = door and door.secret and not World.is_door_open(world, door)
-			local color = (door and not is_secret) and palette.door or palette.wall
-			self:draw_wall(camera, sector, wall, color, clip_left, clip_right, gloom)
-		end
+				local color = (door and not is_secret) and (door.style == "shortcut" and palette.shortcut or palette.door) or palette.wall
+				self:draw_wall(camera, sector, wall, color, clip_left, clip_right, gloom)
+			end
 	end
 	visited[sector_id] = nil -- per-branch: allow sector to render through other portals
 end
@@ -343,15 +345,15 @@ function Renderer:draw(run_state)
 	end
 	if run_state.world.decorations then
 		for _, deco in ipairs(run_state.world.decorations) do
-			sprite_entities[#sprite_entities + 1] = {
-				kind = deco.kind,
-				x = deco.x,
-				y = deco.y,
-				scale = deco.kind == "corpse" and 0.5 or 0.3,
-				active = true,
-			}
+				sprite_entities[#sprite_entities + 1] = {
+					kind = deco.kind,
+					x = deco.x,
+					y = deco.y,
+					scale = deco.kind == "corpse" and 0.5 or (deco.kind == "sprint_marker" and 0.42 or 0.3),
+					active = true,
+				}
+			end
 		end
-	end
 
 	self:renderSprites(run_state.camera, run_state.world, sprite_entities, run_state)
 	self.hud:draw(run_state, love.graphics)
