@@ -43,6 +43,8 @@ local palette = {
 	burn_marker = { 0.96, 0.44, 0.28, 1.0 },
 	pillar_marker = { 0.82, 0.96, 0.76, 1.0 },
 	ghost = { 0.3, 0.85, 0.95, 0.5 },
+	bonfire = { 0.95, 0.55, 0.15, 1.0 },
+	vending_machine = { 0.5, 0.6, 0.7, 1.0 },
 }
 
 local flame_palette = {
@@ -474,7 +476,7 @@ function Renderer:draw(run_state)
 					kind = deco.kind,
 					x = deco.x,
 					y = deco.y,
-					scale = deco.kind == "vending_machine" and 0.7
+					scale = (deco.kind == "vending_machine" or deco.kind == "bonfire") and 0.7
 						or (deco.kind == "corpse" and 0.5
 						or ((deco.kind == "sprint_marker" or deco.kind == "minimum_marker" or deco.kind == "dark_marker" or deco.kind == "flare_marker" or deco.kind == "burn_marker" or deco.kind == "pillar_marker") and 0.42 or 0.3)),
 					active = true,
