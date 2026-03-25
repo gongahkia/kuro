@@ -1,6 +1,15 @@
 local Sprint = require("src.game.sprint")
 
 return {
+	["sprint packs expose routes and practice targets"] = function()
+		local pack = Sprint.get_pack("black_flame_circuit")
+		assert(pack.version == "1.0.0", "expected pack version")
+		local manifest = Sprint.get_route_manifest("black_flame_circuit", "ember_arc", 1)
+		assert(manifest.minimum_torch_room == 1, "expected authored minimum torch room")
+		local targets = Sprint.list_practice_targets("black_flame_circuit", "ember_arc")
+		assert(#targets >= 7, "expected floor targets plus drills")
+	end,
+
 	["sprint category keys and medals are deterministic"] = function()
 		local key = Sprint.category_key("stalker", "black_flame_circuit", "ember_arc")
 		assert(key == "sprint:stalker:black_flame_circuit:ember_arc", "expected stable category key")
@@ -59,5 +68,18 @@ return {
 		assert(next_result.new_best_splits == true, "faster first split should update best split table")
 		assert(updated[next_result.category_key].best_splits[1].time == 58, "expected improved split time")
 		assert(updated[next_result.category_key].best_time == 190, "expected pb total to remain unchanged")
+		assert(updated[next_result.category_key].best_possible_time ~= nil, "expected best possible time")
+	end,
+
+	["practice records track drill bests locally"] = function()
+		local records = Sprint.update_practice_record({}, {
+			mode = "sprint",
+			sprint_ruleset = "practice",
+			outcome = "victory",
+			practice_target = "drill:black_flame_circuit:ember_arc:flare_line",
+			practice_target_label = "Flare Line Drill",
+			duration = 28.5,
+		})
+		assert(records["drill:black_flame_circuit:ember_arc:flare_line"].best_time == 28.5, "expected practice best time")
 	end,
 }
