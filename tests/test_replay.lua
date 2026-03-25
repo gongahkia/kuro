@@ -62,6 +62,11 @@ local suite = {
 			pack_version = "1.0.0",
 			practice_target = "",
 			medal = "gold",
+			best_possible_time = 160,
+			gold_splits = { "floor_1_clear" },
+			projected_saves = {
+				{ id = "run_finish", label = "Run Finish", save = 1.4 },
+			},
 			timer_start_reason = "movement",
 			tech_usage = {
 				burn_dashes = 2,
@@ -74,6 +79,7 @@ local suite = {
 		Replay.set_metadata({
 			pb = true,
 			restart_reason = "pb_finish",
+			replay_file = "spec_run.txt",
 		})
 		Replay.record_key_state("w", false, 0.6)
 		Replay.stop_recording()
@@ -88,8 +94,12 @@ local suite = {
 		assert(replay.metadata.timer_start_reason == "movement", "expected timer start metadata")
 		assert(replay.metadata.pb == true, "expected pb metadata")
 		assert(replay.metadata.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected category metadata")
+		assert(replay.metadata.best_possible_time == 160, "expected best possible metadata")
+		assert(replay.metadata.replay_file == "spec_run.txt", "expected replay filename metadata")
 		assert(replay.metadata.tech_usage.burn_dashes == 2, "expected tech usage metadata")
 		assert(replay.metadata.route_events.burn_lane_dashes == 1, "expected route event metadata")
+		assert(replay.metadata.gold_splits[1] == "floor_1_clear", "expected gold split metadata")
+		assert(replay.metadata.projected_saves[1].label == "Run Finish", "expected projected save metadata")
 		assert(#replay.splits == 1, "expected split table persistence")
 		assert(#replay.ghost_frames == 2, "expected stored ghost frames")
 	end,
