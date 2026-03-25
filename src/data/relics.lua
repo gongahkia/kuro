@@ -10,5 +10,5 @@ return {
 	{ id = "starved_flame", label = "Starved Flame", desc = "Burst costs 40% less light", effect = "burst_cost_mult", value = 0.6, tier = 3, pool = "rare" },
 	{ id = "undying_ember", label = "Undying Ember", desc = "Survive one lethal hit per floor", effect = "second_chance", value = true, tier = 3, pool = "rare" },
 	{ id = "void_sight", label = "Void Sight", desc = "See enemies through walls on automap", effect = "automap_enemies", value = true, tier = 3, pool = "rare" },
-	{ id = "hollow_bone", label = "Hollow Bone", desc = "Hunger decays 30% slower", effect = "hunger_rate_mult", value = 0.7, tier = 2, pool = "uncommon" },
+	{ id = "steady_mind", label = "Steady Mind", desc = "Sanity drains 28% slower", effect = "sanity_drain_mult", value = 0.72, tier = 2, pool = "uncommon" },
 }

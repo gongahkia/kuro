@@ -12,7 +12,10 @@ end
 
 local function player_visible(enemy, context, spec)
 	local distance = util.distance(enemy.x, enemy.y, context.player.x, context.player.y)
-	if distance > spec.range then
+	local effective_range = spec.range
+	effective_range = effective_range * (context.visibility_factor or 1.0)
+	effective_range = effective_range * (context.enemy_range_mult or 1.0)
+	if distance > effective_range then
 		return false, distance
 	end
 	return World.has_line_of_sight(context.world, enemy.x, enemy.y, context.player.x, context.player.y), distance
@@ -93,11 +96,22 @@ end
 function AI.update_enemy(run, enemy, dt)
 	local spec = archetypes[enemy.kind] or archetypes.stalker
 	local speed = effective_speed(spec, enemy)
+	local visibility_factor = 1.0
+	if run.stealth then
+		visibility_factor = util.clamp(run.stealth:compute_visibility(run.player.light_charge, run.player.max_light_charge, run.blackout_time) + 0.2, 0.2, 1.2)
+	end
+	local sanity_effects = run.sanity and run.sanity:get_effects() or nil
+	local enemy_range_mult = run.relics and run.relics:get_value("enemy_range_mult", 1.0) or 1.0
+	local enemy_speed_mult = sanity_effects and sanity_effects.enemy_speed_mult or 1.0
+	local time_attack_mult = run.time_attack_enemy_mult or 1.0
+	speed = speed * enemy_speed_mult * time_attack_mult
 	local state, visible, player_distance = AI.describe(enemy, {
 		world = run.world,
 		player = run.player,
 		alarm_time = run.alarm_time,
 		boss_active = run.boss.active,
+		visibility_factor = visibility_factor,
+		enemy_range_mult = enemy_range_mult,
 	})
 	enemy.state = state
 	enemy.cooldown = math.max(0, (enemy.cooldown or 0) - dt)

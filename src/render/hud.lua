@@ -1,5 +1,6 @@
 local util = require("src.core.util")
 local World = require("src.world.world")
+local Consumables = require("src.data.consumables")
 
 local HUD = {}
 HUD.__index = HUD
@@ -10,6 +11,22 @@ local palette = {
 	exit = { 0.35, 0.75, 0.95, 1.0 },
 	flare = { 1.0, 0.96, 0.55, 1.0 },
 }
+
+local flame_palette = {
+	amber = { 0.92, 0.74, 0.24 },
+	red = { 0.94, 0.38, 0.28 },
+	blue = { 0.46, 0.72, 0.98 },
+}
+
+local function format_time(seconds)
+	local minutes = math.floor((seconds or 0) / 60)
+	local secs = (seconds or 0) - minutes * 60
+	return string.format("%02d:%05.2f", minutes, secs)
+end
+
+local function format_delta(value)
+	return value and string.format("%+0.2fs", value) or "--"
+end
 
 function HUD.new(settings)
 	return setmetatable({
@@ -27,17 +44,18 @@ function HUD:is_paused()
 	return self.paused
 end
 
-function HUD:draw_bars(player, lg)
+function HUD:draw_bars(player, lg, flame_color)
 	local bar_x = 16
 	local bar_y = 100
 	local bar_w = 200
+	local flame = flame_palette[flame_color or "amber"] or flame_palette.amber
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y, bar_w, 12)
 	lg.setColor(0.92, 0.25, 0.22)
 	lg.rectangle("fill", bar_x, bar_y, bar_w * (player.health / player.max_health), 12)
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y + 18, bar_w, 12)
-	lg.setColor(0.92, 0.74, 0.24)
+	lg.setColor(flame[1], flame[2], flame[3])
 	lg.rectangle("fill", bar_x, bar_y + 18, bar_w * (player.light_charge / player.max_light_charge), 12)
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y + 36, bar_w, 10)
@@ -45,21 +63,46 @@ function HUD:draw_bars(player, lg)
 	lg.rectangle("fill", bar_x, bar_y + 36, bar_w * (player.burst_charge / 1.5), 10)
 end
 
-function HUD:draw_survival_bars(hunger, lg)
-	if not hunger then return end
+function HUD:draw_sanity_bar(sanity, lg)
+	if not sanity then return end
+	local status = sanity:get_status()
 	local bar_x = 16
 	local bar_y = 152
 	local bar_w = 140
 	lg.setColor(0.15, 0.15, 0.18)
 	lg.rectangle("fill", bar_x, bar_y, bar_w, 8)
-	lg.setColor(0.72, 0.52, 0.22)
-	lg.rectangle("fill", bar_x, bar_y, bar_w * hunger:get_hunger_pct(), 8)
-	lg.setColor(0.15, 0.15, 0.18)
-	lg.rectangle("fill", bar_x, bar_y + 12, bar_w, 8)
-	lg.setColor(0.55, 0.35, 0.85)
-	lg.rectangle("fill", bar_x, bar_y + 12, bar_w * hunger:get_sanity_pct(), 8)
+	local color = { 0.46, 0.82, 0.95 }
+	if status.tier == "strained" then
+		color = { 0.95, 0.76, 0.28 }
+	elseif status.tier == "broken" then
+		color = { 0.95, 0.36, 0.36 }
+	end
+	lg.setColor(color)
+	lg.rectangle("fill", bar_x, bar_y, bar_w * (status.sanity / status.max_sanity), 8)
 	lg.setColor(0.5, 0.5, 0.55)
-	lg.print(string.format("Hunger %.0f%%  Sanity %.0f%%", hunger:get_hunger_pct() * 100, hunger:get_sanity_pct() * 100), bar_x, bar_y + 24)
+	lg.print(string.format("Sanity %.0f%%  %s", (status.sanity / status.max_sanity) * 100, status.tier), bar_x, bar_y + 16)
+end
+
+function HUD:draw_consumables(player, lg)
+	local base_x = 16
+	local base_y = 186
+	lg.setColor(0.82, 0.84, 0.88)
+	lg.print("Belt", base_x, base_y)
+	for index = 1, 3 do
+		local kind = player.consumables[index]
+		local label = "---"
+		if kind and Consumables.get(kind) then
+			label = Consumables.get(kind).short_label or kind
+		elseif kind then
+			label = kind
+		end
+		lg.setColor(0.5, 0.5, 0.56)
+		lg.rectangle("line", base_x + 36 + (index - 1) * 70, base_y - 2, 60, 16)
+		lg.setColor(0.82, 0.84, 0.88)
+		lg.print(string.format("%d:%s", index, label), base_x + 40 + (index - 1) * 70, base_y)
+	end
+	lg.setColor(0.55, 0.58, 0.64)
+	lg.print(string.format("Wards %d", player.ward_charges or 0), base_x, base_y + 20)
 end
 
 function HUD:draw_messages(messages, lg, height)
@@ -74,12 +117,14 @@ end
 
 function HUD:draw_automap(run_state, lg)
 	if not run_state.automap_enabled then return end
+	if run_state.sanity and not run_state.sanity:can_show_automap(love.timer.getTime()) then return end
 	local width = lg.getDimensions()
 	local panel_size = 220
 	local panel_x = width - panel_size - 16
 	local panel_y = 16
 	local cell_size = math.floor(panel_size / math.max(run_state.world.width, run_state.world.height))
-	lg.setColor(0.04, 0.05, 0.06, 0.84)
+	local automap_alpha = run_state.sanity and run_state.sanity:get_effects().automap_alpha or 0.84
+	lg.setColor(0.04, 0.05, 0.06, automap_alpha)
 	lg.rectangle("fill", panel_x, panel_y, panel_size, panel_size, 10, 10)
 	for y = 1, run_state.world.height do
 		for x = 1, run_state.world.width do
@@ -117,6 +162,19 @@ function HUD:draw_automap(run_state, lg)
 		lg.setColor(palette.flare)
 		lg.circle("fill", fx, fy, math.max(2, cell_size * 0.22))
 	end
+	if run_state.settings.runner_ghost_visible ~= false and run_state.ghost_compare and run_state.ghost_compare.breadcrumbs then
+		lg.setColor(0.42, 0.84, 1.0, 0.55)
+		for _, frame in ipairs(run_state.ghost_compare.breadcrumbs) do
+			local gx, gy = World.world_to_cell(frame.x, frame.y)
+			lg.circle("fill", panel_x + (gx - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (gy - 1) * cell_size + cell_size * 0.5 + 8, math.max(1, cell_size * 0.10))
+		end
+		local marker = run_state.ghost_compare.marker
+		if marker and marker.floor == run_state.floor then
+			local gx, gy = World.world_to_cell(marker.x, marker.y)
+			lg.setColor(0.76, 0.94, 1.0, 0.95)
+			lg.circle("line", panel_x + (gx - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (gy - 1) * cell_size + cell_size * 0.5 + 8, math.max(2, cell_size * 0.24))
+		end
+	end
 	local player_cell_x, player_cell_y = World.world_to_cell(run_state.player.x, run_state.player.y)
 	local px = panel_x + (player_cell_x - 1) * cell_size + cell_size * 0.5 + 8
 	local py = panel_y + (player_cell_y - 1) * cell_size + cell_size * 0.5 + 8
@@ -125,6 +183,18 @@ function HUD:draw_automap(run_state, lg)
 	lg.setColor(0.95, 0.95, 0.98)
 	lg.circle("fill", px, py, math.max(2, cell_size * 0.24))
 	lg.line(px, py, px + facing_x * 8, py + facing_y * 8)
+	if run_state.player.blacklight or (run_state.relics and run_state.relics:has_effect("automap_enemies")) then
+		for _, enemy in ipairs(run_state.world.enemies) do
+			if enemy.alive ~= false then
+				local ex, ey = World.world_to_cell(enemy.x, enemy.y)
+				local key = string.format("%d:%d", ex, ey)
+				if run_state.revealed[key] then
+					lg.setColor(0.58, 0.72, 1.0, 0.8)
+					lg.circle("fill", panel_x + (ex - 1) * cell_size + cell_size * 0.5 + 8, panel_y + (ey - 1) * cell_size + cell_size * 0.5 + 8, math.max(2, cell_size * 0.16))
+				end
+			end
+		end
+	end
 end
 
 function HUD:draw_overlay_fx(run_state, lg)
@@ -136,6 +206,16 @@ function HUD:draw_overlay_fx(run_state, lg)
 	if run_state.blackout_time > 0 then
 		lg.setColor(0.0, 0.0, 0.0, util.clamp(run_state.blackout_time * 0.28, 0.1, 0.45))
 		lg.rectangle("fill", 0, 0, width, height)
+	end
+	if run_state.sanity then
+		local effects = run_state.sanity:get_effects()
+		if effects.tier == "strained" then
+			lg.setColor(0.28, 0.18, 0.05, 0.08)
+			lg.rectangle("fill", 0, 0, width, height)
+		elseif effects.tier == "broken" then
+			lg.setColor(0.35, 0.05, 0.05, 0.14)
+			lg.rectangle("fill", 0, 0, width, height)
+		end
 	end
 end
 
@@ -156,10 +236,10 @@ function HUD:draw(run_state, lg)
 	end
 	self:draw_crosshair(lg)
 	lg.setColor(0.92, 0.94, 0.97)
-	lg.print(string.format("KURO  Floor %d/%d  %s  Seed %d", run_state.floor, run_state.total_floors, run_state.difficulty_label, run_state.seed), 16, 12)
+	lg.print(string.format("KURO  Floor %d/%d  %s  %s", run_state.floor, run_state.total_floors, run_state.difficulty_label, run_state.mode_label or "Classic"), 16, 12)
 	lg.print(string.format("HP %d/%d", player.health, player.max_health), 16, 34)
 	lg.print(string.format("Torches %d  Goal %d", player.inventory_torches, player.torch_goal), 16, 54)
-	lg.print(string.format("Charge %d%%  Flares %d  Phase %d", math.floor(player.light_charge), player.flares, run_state.boss.phase or 1), 16, 74)
+	lg.print(string.format("Charge %d%%  Flares %d  Seed %d", math.floor(player.light_charge), player.flares, run_state.seed), 16, 74)
 	if run_state.relics and run_state.relics:count() > 0 then
 		local relic_names = {}
 		for _, r in ipairs(run_state.relics:list()) do relic_names[#relic_names + 1] = r.label end
@@ -170,9 +250,111 @@ function HUD:draw(run_state, lg)
 		lg.setColor(0.5, 0.7, 0.9)
 		lg.print("[crouching]", 230, 12)
 	end
+	lg.setColor(0.92, 0.94, 0.97)
+	lg.print("Time " .. format_time(run_state.clock or 0), 230, 12)
+	if run_state.mode == "time_attack" then
+		lg.setColor(0.95, 0.8, 0.28)
+		lg.print(string.format("Pressure Lvl %d", run_state.time_attack_level or 0), 230, 34)
+	elseif run_state.mode == "daily" and run_state.daily_label then
+		lg.setColor(0.66, 0.82, 0.96)
+		lg.print("Daily " .. run_state.daily_label, 230, 34)
+	elseif run_state.mode == "sprint" then
+		lg.setColor(0.94, 0.88, 0.42)
+		lg.print(string.format("Sprint %s", run_state.sprint_ruleset == "practice" and "Practice" or "Official"), 230, 34)
+		local stack = run_state.get_split_stack and run_state:get_split_stack() or nil
+		if run_state.settings.runner_show_split_delta ~= false and stack then
+			local delta = run_state.last_split_delta
+			if delta then
+				lg.setColor(delta <= 0 and 0.42 or 0.95, delta <= 0 and 0.95 or 0.42, 0.42)
+			else
+				lg.setColor(0.82, 0.84, 0.88)
+			end
+			lg.print(string.format("Prev %s  %s", stack.last and stack.last.label or "Start", format_delta(delta)), 230, 54)
+			lg.setColor(0.82, 0.84, 0.88)
+			lg.print(string.format("Live Segment %s", format_time(stack.current_segment_time or 0)), 230, 74)
+			if stack.last_segment_time and stack.last_segment_best then
+				lg.print(string.format("Last Seg %s / %s", format_time(stack.last_segment_time), format_time(stack.last_segment_best)), 230, 94)
+			else
+				lg.print("Last Seg --", 230, 94)
+			end
+			lg.print(string.format("Next %s", stack.next and stack.next.label or "Finish"), 230, 114)
+			if stack.projected_finish then
+				lg.print(string.format("Proj %s  %s", format_time(stack.projected_finish), format_delta(stack.projected_delta)), 230, 134)
+			end
+			if stack.best_possible_time then
+				lg.print("Best Possible " .. format_time(stack.best_possible_time), 230, 154)
+			end
+		end
+		if run_state.settings.runner_show_medal_pace ~= false then
+			local pace = run_state:get_medal_pace()
+			if pace then
+				lg.setColor(0.7, 0.86, 1.0)
+				lg.print(string.format("Gold Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 174)
+			end
+		end
+		if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+			lg.setColor(0.72, 0.9, 1.0)
+			local warning = run_state.pack_version_mismatch and string.format("Legacy PB %s", run_state.pb_pack_version or "?") or "Mixed split versions"
+			if run_state.pack_version_mismatch and run_state.mixed_split_versions then
+				warning = warning .. "  Mixed splits"
+			end
+			lg.print(warning, 230, 194)
+		end
+		local cue = run_state.get_ghost_cue and run_state:get_ghost_cue() or nil
+		if cue and run_state.settings.runner_ghost_visible ~= false then
+			lg.setColor(0.72, 0.9, 1.0)
+			local heading = math.deg(cue.angle_delta or 0)
+			local direction = math.abs(heading) < 18 and "ahead"
+				or (heading < 0 and "left" or "right")
+			lg.print(string.format("Ghost %.1fm  %s %.0f deg", cue.distance or 0, direction, math.abs(heading)), 230, (run_state.pack_version_mismatch or run_state.mixed_split_versions) and 214 or 194)
+		end
+		local route = run_state.get_route_indicator and run_state:get_route_indicator() or nil
+		if route then
+			lg.setColor(0.8, 0.96, 0.76)
+			local route_y = 214
+			if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+				route_y = route_y + 20
+			end
+			if cue and run_state.settings.runner_ghost_visible ~= false then
+				route_y = route_y + 20
+			end
+			lg.print(string.format("Route %s  %.1fm  %+.0f deg", route.label or route.type or "target", route.distance or 0, math.deg(route.angle_delta or 0)), 230, route_y)
+		end
+		local tech_y = 214
+		if run_state.pack_version_mismatch or run_state.mixed_split_versions then
+			tech_y = tech_y + 20
+		end
+		if cue and run_state.settings.runner_ghost_visible ~= false then
+			tech_y = tech_y + 20
+		end
+		if route then
+			tech_y = tech_y + 20
+		end
+		lg.setColor(0.96, 0.82, 0.46)
+		local dash_ready = run_state.player.burst_charge >= 0.55 and run_state.player.dash_cooldown <= 0 and run_state.player.light_charge >= 12
+		local dash_text = run_state.player.dash_feedback_time > 0 and "Burn Dash landed"
+			or (dash_ready and "Burn Dash armed" or string.format("Burn cooldown %.2f", run_state.player.dash_cooldown or 0))
+		lg.print(dash_text, 230, tech_y)
+		local flare_hot = false
+		for _, flare in ipairs(run_state.flares or {}) do
+			if flare.boosted ~= true and (flare.boost_window or 0) > 0 then
+				flare_hot = true
+				break
+			end
+		end
+		lg.setColor(1.0, 0.84, 0.42)
+		local flare_text = run_state.player.flare_feedback_time > 0 and "Flare line caught"
+			or (run_state.player.flare_line_window > 0 and string.format("Flare window %.2fs", run_state.player.flare_line_window))
+			or (flare_hot and "Flare line primed" or "Flare line idle")
+		lg.print(flare_text, 230, tech_y + 20)
+	else
+		lg.setColor(0.82, 0.84, 0.88)
+		lg.print("Descent timer active", 230, 34)
+	end
 	lg.print(run_state.objective_text or "", 16, height - 86)
-	self:draw_bars(player, lg)
-	self:draw_survival_bars(run_state.hunger, lg)
+	self:draw_bars(player, lg, run_state.flame_color)
+	self:draw_sanity_bar(run_state.sanity, lg)
+	self:draw_consumables(player, lg)
 	self:draw_messages(run_state.messages, lg, height)
 	local objective = run_state:current_objective_cell()
 	if objective then
@@ -211,9 +393,14 @@ function HUD:draw_pause(run_state, lg)
 			string.format("Torches collected: %d", stats.torches_collected),
 			string.format("Enemies burned: %d", stats.enemies_burned),
 			string.format("Encounters triggered: %d", stats.encounters_triggered),
-			string.format("Anchors lit: %d", stats.anchors_lit),
-			string.format("Flares used: %d", stats.flares_used),
-		}
+				string.format("Anchors lit: %d", stats.anchors_lit),
+				string.format("Flares used: %d", stats.flares_used),
+				string.format("Consumables used: %d", stats.consumables_used or 0),
+				string.format("Wards triggered: %d", stats.wards_triggered or 0),
+				string.format("Secrets revealed: %d", stats.secrets_revealed or 0),
+				string.format("Burn dashes: %d", stats.burn_dashes or 0),
+				string.format("Flare boosts: %d", stats.flare_boosts or 0),
+			}
 		for _, line in ipairs(lines) do
 			lg.print(line, width * 0.3, content_y)
 			content_y = content_y + 22
@@ -240,15 +427,28 @@ function HUD:draw_pause(run_state, lg)
 		end
 	elseif self.pause_tab == 4 then -- settings
 		lg.setColor(0.82, 0.84, 0.88)
-		local toggles = { "screen_shake", "flash_on_kill", "pulse_light", "death_animations", "footstep_bob", "title_flicker" }
-		for i, key in ipairs(toggles) do
-			local val = self.settings[key]
-			lg.print(string.format("[%s] %s: %s", string.char(96 + i), key, val and "ON" or "OFF"), width * 0.3, content_y)
-			content_y = content_y + 22
+			local toggles = {
+				"screen_shake",
+				"flash_on_kill",
+				"pulse_light",
+				"death_animations",
+				"footstep_bob",
+				"title_flicker",
+				"runner_ghost_visible",
+				"runner_auto_save_pb_replay",
+				"runner_restart_confirmation",
+				"runner_practice_auto_restart",
+				"runner_show_medal_pace",
+				"runner_show_split_delta",
+			}
+			for i, key in ipairs(toggles) do
+				local val = self.settings[key]
+				lg.print(string.format("[%s] %s: %s", string.char(96 + i), key, val and "ON" or "OFF"), width * 0.3, content_y)
+				content_y = content_y + 22
+			end
 		end
-	end
-	lg.setColor(0.5, 0.5, 0.55)
-	lg.printf("[Esc] Resume  [1-4] Tab", 0, height * 0.88, width, "center")
+		lg.setColor(0.5, 0.5, 0.55)
+		lg.printf("[Esc] Resume  [R] Restart  [1-4] Tab  [V] Save Replay", 0, height * 0.88, width, "center")
 end
 
 function HUD:pause_keypressed(key)
@@ -262,6 +462,12 @@ function HUD:pause_keypressed(key)
 	elseif key == "d" then self:toggle_setting("death_animations")
 	elseif key == "e" then self:toggle_setting("footstep_bob")
 	elseif key == "f" then self:toggle_setting("title_flicker")
+	elseif key == "g" then self:toggle_setting("runner_ghost_visible")
+	elseif key == "h" then self:toggle_setting("runner_auto_save_pb_replay")
+	elseif key == "i" then self:toggle_setting("runner_restart_confirmation")
+	elseif key == "j" then self:toggle_setting("runner_practice_auto_restart")
+	elseif key == "k" then self:toggle_setting("runner_show_medal_pace")
+	elseif key == "l" then self:toggle_setting("runner_show_split_delta")
 	end
 end
 

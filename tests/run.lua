@@ -21,8 +21,12 @@ local suites = {
 	(require("test_encounters")),
 	(require("test_relics")),
 	(require("test_stealth")),
-	(require("test_hunger")),
+	(require("test_sanity")),
 	(require("test_meta")),
+	(require("test_challenges")),
+	(require("test_sprint")),
+	(require("test_app")),
+	(require("test_replay")),
 }
 
 local passed = 0
