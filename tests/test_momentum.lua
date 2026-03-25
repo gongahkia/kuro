@@ -90,6 +90,16 @@ return {
 		assert(m:get_speed() == 0, "expected zero after reset")
 		assert(m.chain_bonus == 1.0, "expected chain reset")
 	end,
+	["momentum diagonal uncapped with chain bonus"] = function()
+		local m = Momentum.new()
+		local p = make_player(0)
+		m:notify_tech("bhop") -- activate chain
+		for _ = 1, 30 do
+			m:update(1/60, make_input({ move = 1, strafe = 1 }), p, nil)
+		end
+		local speed = m:get_speed()
+		assert(speed > 2.7, "expected uncapped diagonal with chain, got " .. speed)
+	end,
 	["momentum air strafe adds lateral velocity"] = function()
 		local m = Momentum.new()
 		local p = make_player(0) -- facing east
