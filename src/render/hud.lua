@@ -24,6 +24,10 @@ local function format_time(seconds)
 	return string.format("%02d:%05.2f", minutes, secs)
 end
 
+local function format_delta(value)
+	return value and string.format("%+0.2fs", value) or "--"
+end
+
 function HUD.new(settings)
 	return setmetatable({
 		settings = settings or {},
@@ -257,22 +261,50 @@ function HUD:draw(run_state, lg)
 	elseif run_state.mode == "sprint" then
 		lg.setColor(0.94, 0.88, 0.42)
 		lg.print(string.format("Sprint %s", run_state.sprint_ruleset == "practice" and "Practice" or "Official"), 230, 34)
-		if run_state.settings.runner_show_split_delta ~= false then
+		local stack = run_state.get_split_stack and run_state:get_split_stack() or nil
+		if run_state.settings.runner_show_split_delta ~= false and stack then
 			local delta = run_state.last_split_delta
 			if delta then
 				lg.setColor(delta <= 0 and 0.42 or 0.95, delta <= 0 and 0.95 or 0.42, 0.42)
 			else
 				lg.setColor(0.82, 0.84, 0.88)
 			end
-			lg.print(delta and string.format("Split %+0.2fs", delta) or "Split --", 230, 54)
+			lg.print("Last " .. format_delta(delta), 230, 54)
+			lg.setColor(0.82, 0.84, 0.88)
+			lg.print(string.format("Segment %s  %s", stack.last and stack.last.label or "Start", format_time(stack.current_segment_time or 0)), 230, 74)
+			lg.print(string.format("Next %s", stack.next and stack.next.label or "Finish"), 230, 94)
+			if stack.projected_finish then
+				lg.print(string.format("Proj %s  %s", format_time(stack.projected_finish), format_delta(stack.projected_delta)), 230, 114)
+			end
+			if stack.best_possible_time then
+				lg.print("Best Possible " .. format_time(stack.best_possible_time), 230, 134)
+			end
 		end
 		if run_state.settings.runner_show_medal_pace ~= false then
 			local pace = run_state:get_medal_pace()
 			if pace then
 				lg.setColor(0.7, 0.86, 1.0)
-				lg.print(string.format("Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 74)
+				lg.print(string.format("Pace %s %+0.2fs", pace.medal, pace.delta or 0), 230, 154)
 			end
 		end
+		local cue = run_state.get_ghost_cue and run_state:get_ghost_cue() or nil
+		if cue and run_state.settings.runner_ghost_visible ~= false then
+			lg.setColor(0.72, 0.9, 1.0)
+			lg.print(string.format("Ghost %.1fm  %+.0f deg", cue.distance or 0, math.deg(cue.angle_delta or 0)), 230, 174)
+		end
+		local tech_y = 194
+		lg.setColor(0.96, 0.82, 0.46)
+		local dash_ready = run_state.player.burst_charge >= 0.55 and run_state.player.dash_cooldown <= 0 and run_state.player.light_charge >= 12
+		lg.print(dash_ready and "Burn Dash armed" or string.format("Burn cooldown %.2f", run_state.player.dash_cooldown or 0), 230, tech_y)
+		local flare_hot = false
+		for _, flare in ipairs(run_state.flares or {}) do
+			if flare.boosted ~= true and (flare.boost_window or 0) > 0 then
+				flare_hot = true
+				break
+			end
+		end
+		lg.setColor(1.0, 0.84, 0.42)
+		lg.print(flare_hot and "Flare line hot" or "Flare line idle", 230, tech_y + 20)
 	else
 		lg.setColor(0.82, 0.84, 0.88)
 		lg.print("Descent timer active", 230, 34)
@@ -363,6 +395,7 @@ function HUD:draw_pause(run_state, lg)
 				"runner_ghost_visible",
 				"runner_auto_save_pb_replay",
 				"runner_restart_confirmation",
+				"runner_practice_auto_restart",
 				"runner_show_medal_pace",
 				"runner_show_split_delta",
 			}
@@ -390,8 +423,9 @@ function HUD:pause_keypressed(key)
 	elseif key == "g" then self:toggle_setting("runner_ghost_visible")
 	elseif key == "h" then self:toggle_setting("runner_auto_save_pb_replay")
 	elseif key == "i" then self:toggle_setting("runner_restart_confirmation")
-	elseif key == "j" then self:toggle_setting("runner_show_medal_pace")
-	elseif key == "k" then self:toggle_setting("runner_show_split_delta")
+	elseif key == "j" then self:toggle_setting("runner_practice_auto_restart")
+	elseif key == "k" then self:toggle_setting("runner_show_medal_pace")
+	elseif key == "l" then self:toggle_setting("runner_show_split_delta")
 	end
 end
 
