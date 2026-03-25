@@ -770,7 +770,8 @@ function App:update(dt)
 
 	local outcome = self.run:update(dt)
 	if not self.run.replay_mode and Replay.is_recording() then
-		Replay.record_ghost_frame(self.run.clock, self.run.floor, self.run.player.x, self.run.player.y)
+		local m = self.run.momentum
+		Replay.record_ghost_frame(self.run.clock, self.run.floor, self.run.player.x, self.run.player.y, m and m:get_speed() or 0, m and m:get_technique() or "none")
 	end
 	if self.run.restart_requested and self.last_run_config then
 		self:start_run(self.last_run_config)

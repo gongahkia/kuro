@@ -3,7 +3,7 @@ local Build = require("src.core.build")
 
 local Replay = {}
 
-local FILE_VERSION = "3.1"
+local FILE_VERSION = "4.0"
 local REPLAY_DIR = "replays"
 local EXPORT_DIR = "exports"
 local GHOST_SAMPLE_INTERVAL = 0.25
@@ -260,7 +260,7 @@ local function serialize(data)
 	end
 	lines[#lines + 1] = "GHOST:"
 	for _, frame in ipairs(data.ghost_frames or {}) do
-		lines[#lines + 1] = string.format("%.4f|%d|%.4f|%.4f", frame.timestamp or 0, frame.floor or 1, frame.x or 0, frame.y or 0)
+		lines[#lines + 1] = string.format("%.4f|%d|%.4f|%.4f|%.2f|%s", frame.timestamp or 0, frame.floor or 1, frame.x or 0, frame.y or 0, frame.speed or 0, frame.technique or "none")
 	end
 	lines[#lines + 1] = "INPUTS:"
 	for _, input in ipairs(data.inputs or {}) do
@@ -341,13 +341,16 @@ local function deserialize_text(contents)
 				}
 			end
 		elseif section == "ghost" then
-			local timestamp, floor, x, y = line:match("([^|]+)|([^|]+)|([^|]+)|([^|]+)")
-			if timestamp and floor and x and y then
+			local parts = {}
+			for part in line:gmatch("[^|]+") do parts[#parts + 1] = part end
+			if #parts >= 4 then
 				replay.ghost_frames[#replay.ghost_frames + 1] = {
-					timestamp = tonumber(timestamp) or 0,
-					floor = tonumber(floor) or 1,
-					x = tonumber(x) or 0,
-					y = tonumber(y) or 0,
+					timestamp = tonumber(parts[1]) or 0,
+					floor = tonumber(parts[2]) or 1,
+					x = tonumber(parts[3]) or 0,
+					y = tonumber(parts[4]) or 0,
+					speed = tonumber(parts[5]) or 0, -- v4.0+, defaults to 0
+					technique = parts[6] or "none", -- v4.0+, defaults to "none"
 				}
 			end
 		elseif section == "inputs" then
@@ -464,7 +467,7 @@ function Replay.record_key_state(key, is_down, timestamp)
 	}
 end
 
-function Replay.record_ghost_frame(timestamp, floor, x, y)
+function Replay.record_ghost_frame(timestamp, floor, x, y, speed, technique)
 	if not recording then
 		return
 	end
@@ -478,6 +481,8 @@ function Replay.record_ghost_frame(timestamp, floor, x, y)
 		floor = floor or 1,
 		x = x or 0,
 		y = y or 0,
+		speed = speed or 0,
+		technique = technique or "none",
 	}
 end
 
