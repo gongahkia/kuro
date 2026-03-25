@@ -49,4 +49,28 @@ return {
 		end
 		assert(found_consumable, "expected at least one consumable pickup")
 	end,
+
+	["official sprint floors expose shortcut doors and markers"] = function()
+		local world = Generator.generate("stalker", 41017, 1, {}, {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+		})
+		local found_shortcut = false
+		for _, door in pairs(world.doors) do
+			if door.style == "shortcut" then
+				found_shortcut = true
+				break
+			end
+		end
+		assert(found_shortcut, "expected official sprint shortcut door")
+		local found_marker = false
+		for _, decoration in ipairs(world.decorations or {}) do
+			if decoration.kind == "sprint_marker" then
+				found_marker = true
+			end
+		end
+		assert(found_marker, "expected sprint shortcut markers")
+	end,
 }
