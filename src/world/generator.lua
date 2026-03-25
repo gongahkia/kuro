@@ -178,6 +178,37 @@ local function add_consumable_pickup(meta, reserved, room, rng)
 	reserved[cell.x .. ":" .. cell.y] = true
 end
 
+local function mark_path_tags(meta, path, tag)
+	for _, cell in ipairs(path or {}) do
+		if meta.cells[cell.y] and meta.cells[cell.y][cell.x] then
+			meta.cells[cell.y][cell.x].tags[tag] = true
+		end
+	end
+end
+
+local function add_shortcut_marker(meta, cell)
+	meta.decorations = meta.decorations or {}
+	meta.decorations[#meta.decorations + 1] = {
+		kind = "sprint_marker",
+		cell = { x = cell.x, y = cell.y },
+	}
+end
+
+local function add_sprint_shortcut(meta, from_room, to_room, rng)
+	if not from_room or not to_room then
+		return false
+	end
+	local path = carve_corridor(meta, from_room.center, to_room.center, rng, "shortcut")
+	if #path < 4 then
+		return false
+	end
+	add_door_from_path(meta, path, "shortcut")
+	mark_path_tags(meta, path, "shortcut")
+	add_shortcut_marker(meta, path[1])
+	add_shortcut_marker(meta, path[#path])
+	return true
+end
+
 local function pick_enemy_kind(config, rng)
 	local kinds = {
 		{ kind = "stalker", cost = 1 },
@@ -205,7 +236,8 @@ local function spawn_enemy(meta, reserved, room, cell, kind)
 	reserved[cell.x .. ":" .. cell.y] = true
 end
 
-local function build_standard_floor(config, rng)
+local function build_standard_floor(config, rng, options)
+	options = options or {}
 	local meta = {
 		width = config.map_width,
 		height = config.map_height,
@@ -406,6 +438,12 @@ local function build_standard_floor(config, rng)
 		add_consumable_pickup(meta, reserved, room, rng)
 	end
 
+	if options.mode == "sprint" and options.sprint_ruleset == "official" then
+		local entry_room = candidate_rooms[#candidate_rooms]
+		local target_room = main_rooms[math.max(2, #main_rooms - 1)]
+		add_sprint_shortcut(meta, entry_room, target_room, rng)
+	end
+
 	-- secret rooms (1-2 per floor, using door system)
 	meta.secret_walls = meta.secret_walls or {}
 	local secret_attempts = rng:int(1, 2)
@@ -476,7 +514,8 @@ local function build_standard_floor(config, rng)
 	return World.build(meta)
 end
 
-local function build_boss_floor(config, rng)
+local function build_boss_floor(config, rng, options)
+	options = options or {}
 	local meta = {
 		width = math.max(34, config.map_width),
 		height = math.max(18, config.map_height),
@@ -506,6 +545,9 @@ local function build_boss_floor(config, rng)
 	add_door_from_path(meta, carve_corridor(meta, hall.center, chapel.center, rng, "corridor"), "shrine")
 	add_door_from_path(meta, carve_corridor(meta, hall.center, ante.center, rng, "corridor"), "steel")
 	carve_corridor(meta, ante.center, boss.center, rng, "boss")
+	if options.mode == "sprint" and options.sprint_ruleset == "official" then
+		add_sprint_shortcut(meta, chapel, ante, rng)
+	end
 
 	meta.spawn = {
 		cell = { x = start.center.x, y = start.center.y },
@@ -589,13 +631,13 @@ local function build_boss_floor(config, rng)
 	return World.build(meta)
 end
 
-function Generator.generate(difficulty_name, seed, floor, mutators)
+function Generator.generate(difficulty_name, seed, floor, mutators, options)
 	local config = Difficulty.build(difficulty_name, floor, mutators)
 	local rng = RNG.new(seed + floor * 7919)
 	if floor >= 3 then
-		return build_boss_floor(config, rng)
+		return build_boss_floor(config, rng, options)
 	end
-	return build_standard_floor(config, rng)
+	return build_standard_floor(config, rng, options)
 end
 
 return Generator
