@@ -38,6 +38,8 @@ return {
 			sprint_seed_pack_id = "black_flame_circuit",
 			sprint_seed_id = "ember_arc",
 			difficulty_id = "stalker",
+			pack_version = "1.0.0",
+			build_id = "build_a",
 			outcome = "victory",
 			official_record_eligible = true,
 			duration = 190,
@@ -49,6 +51,8 @@ return {
 		local records, result = Sprint.update_record({}, summary, "pb_file.txt")
 		assert(result.new_pb == true, "first official run should become the pb")
 		assert(records[result.category_key].best_time == 190, "expected stored pb time")
+		assert(records[result.category_key].best_time_pack_version == "1.0.0", "expected stored pb version")
+		assert(records[result.category_key].best_time_build_id == "build_a", "expected stored pb build id")
 		assert(records[result.category_key].pb_replay == "pb_file.txt", "expected stored pb replay")
 
 		local slower = {
@@ -57,6 +61,8 @@ return {
 			sprint_seed_pack_id = "black_flame_circuit",
 			sprint_seed_id = "ember_arc",
 			difficulty_id = "stalker",
+			pack_version = "1.1.0",
+			build_id = "build_b",
 			outcome = "victory",
 			official_record_eligible = true,
 			duration = 194,
@@ -69,9 +75,12 @@ return {
 		assert(next_result.new_pb == false, "slower total should not replace pb time")
 		assert(next_result.new_best_splits == true, "faster first split should update best split table")
 		assert(updated[next_result.category_key].best_splits[1].time == 58, "expected improved split time")
+		assert(updated[next_result.category_key].best_splits[1].pack_version == "1.1.0", "expected split provenance update")
 		assert(updated[next_result.category_key].best_time == 190, "expected pb total to remain unchanged")
+		assert(updated[next_result.category_key].best_time_pack_version == "1.0.0", "expected pb version to stay legacy")
 		assert(updated[next_result.category_key].best_possible_time ~= nil, "expected best possible time")
 		assert(type(updated[next_result.category_key].projected_saves) == "table", "expected projected save table")
+		assert(updated[next_result.category_key].mixed_split_versions == true, "expected mixed split warning")
 	end,
 
 	["practice records track drill bests locally"] = function()
