@@ -63,6 +63,9 @@ local suite = {
 			practice_target = "",
 			medal = "gold",
 			best_possible_time = 160,
+			pb_pack_version = "1.0.0",
+			pack_version_mismatch = true,
+			mixed_split_versions = true,
 			gold_splits = { "floor_1_clear" },
 			projected_saves = {
 				{ id = "run_finish", label = "Run Finish", save = 1.4 },
@@ -95,6 +98,9 @@ local suite = {
 		assert(replay.metadata.pb == true, "expected pb metadata")
 		assert(replay.metadata.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected category metadata")
 		assert(replay.metadata.best_possible_time == 160, "expected best possible metadata")
+		assert(replay.metadata.pb_pack_version == "1.0.0", "expected pb pack version metadata")
+		assert(replay.metadata.pack_version_mismatch == true, "expected pack mismatch metadata")
+		assert(replay.metadata.mixed_split_versions == true, "expected mixed split metadata")
 		assert(replay.metadata.replay_file == "spec_run.txt", "expected replay filename metadata")
 		assert(replay.metadata.tech_usage.burn_dashes == 2, "expected tech usage metadata")
 		assert(replay.metadata.route_events.burn_lane_dashes == 1, "expected route event metadata")
@@ -121,6 +127,23 @@ local suite = {
 		Replay.update(0.1)
 		local second = Replay.get_next_input()
 		assert(second.type == "keyup" and second.key == "space", "expected second keyup")
+	end,
+
+	["replay artifact names avoid same-second collisions"] = function()
+		Replay.init()
+		local first = Replay.result_filename("sprint:stalker:black_flame_circuit:ember_arc", 100.125)
+		assert(first:match("^run_sprint_stalker_black_flame_circuit_ember_arc_"), "expected sprint result prefix")
+		love.filesystem.write("replays/" .. first, "occupied")
+		local second = Replay.result_filename("sprint:stalker:black_flame_circuit:ember_arc", 100.125)
+		assert(second ~= first, "expected unique replay filename")
+		assert(second:match("_2%.txt$"), "expected replay collision suffix")
+
+		local export_first = Replay.export_basename("sprint:stalker:black_flame_circuit:ember_arc", 100.125)
+		love.filesystem.write("exports/" .. export_first .. ".txt", "occupied")
+		love.filesystem.write("exports/" .. export_first .. ".json", "occupied")
+		local export_second = Replay.export_basename("sprint:stalker:black_flame_circuit:ember_arc", 100.125)
+		assert(export_second ~= export_first, "expected unique export basename")
+		assert(export_second:match("_2$"), "expected export collision suffix")
 	end,
 }
 
