@@ -485,7 +485,20 @@ end
 Sprint.categories = {
 	{ id = "any", label = "Any%" },
 	{ id = "pacifist", label = "Pacifist" },
+	{ id = "100_torch", label = "100% Torch" },
+	{ id = "all_secrets", label = "All Secrets" },
 }
+
+function Sprint.get_categories()
+	return Sprint.categories
+end
+
+function Sprint.get_category_label(category_id)
+	for _, cat in ipairs(Sprint.categories) do
+		if cat.id == category_id then return cat.label end
+	end
+	return category_id
+end
 
 function Sprint.get_pacifist_medal_targets(base_medals)
 	local result = {}

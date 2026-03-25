@@ -18,6 +18,7 @@ local title_items = {
 	"mode",
 	"sprint_pack",
 	"sprint_ruleset",
+	"sprint_category",
 	"sprint_seed",
 	"practice_target",
 	"loadout",
@@ -209,6 +210,7 @@ function App:get_effective_config()
 				self.settings.selected_sprint_seed_id = selected_seed_id
 			end
 			local seed_entry = Sprint.get_seed(pack_id, selected_seed_id)
+			local category = self.settings.selected_sprint_category or "any"
 			return {
 				mode = "sprint",
 				sprint_ruleset = "official",
@@ -217,7 +219,8 @@ function App:get_effective_config()
 				sprint_seed_pack_id = pack_id,
 				sprint_seed_id = seed_entry.id,
 				pack_version = Sprint.get_pack_version(pack_id),
-				category_key = Sprint.category_key(self.selected_difficulty, pack_id, seed_entry.id),
+				category = category,
+				category_key = Sprint.category_key(self.selected_difficulty, pack_id, seed_entry.id, category),
 				mutators = {},
 				loadout = "default",
 				flame_color = self.settings.selected_flame_color or "amber",
@@ -840,6 +843,7 @@ function App:draw_title()
 		{ key = "mode", label = "Mode", value = config.mode },
 		{ key = "sprint_pack", label = "Sprint Pack", value = self.selected_mode == "sprint" and pack.label or "--" },
 		{ key = "sprint_ruleset", label = "Sprint Rules", value = self.selected_mode == "sprint" and (self.settings.selected_sprint_ruleset or "official") or "--" },
+		{ key = "sprint_category", label = "Category", value = self.selected_mode == "sprint" and Sprint.get_category_label(self.settings.selected_sprint_category or "any") or "--" },
 		{ key = "sprint_seed", label = "Sprint Seed", value = sprint_seed_text },
 		{ key = "practice_target", label = "Practice Target", value = practice_target_text },
 		{ key = "loadout", label = "Loadout", value = config.loadout },
@@ -853,6 +857,7 @@ function App:draw_title()
 	for index, item in ipairs(items) do
 		local disabled = (item.key == "sprint_ruleset" and self.selected_mode ~= "sprint")
 			or (item.key == "sprint_pack" and self.selected_mode ~= "sprint")
+			or (item.key == "sprint_category" and self.selected_mode ~= "sprint")
 			or (item.key == "sprint_seed" and self.selected_mode ~= "sprint")
 			or (item.key == "practice_target" and not (self.selected_mode == "sprint" and self.settings.selected_sprint_ruleset == "practice"))
 			or (item.key == "loadout" and (self.selected_mode == "daily" or self:is_sprint_official()))
@@ -1078,6 +1083,10 @@ function App:adjust_title_item(direction)
 			self.settings.selected_sprint_seed_id,
 			self.settings.selected_sprint_practice_target or "floor:1"
 		)
+	elseif item == "sprint_category" and self.selected_mode == "sprint" then
+		local cat_ids = {}
+		for _, cat in ipairs(Sprint.get_categories()) do cat_ids[#cat_ids + 1] = cat.id end
+		self.settings.selected_sprint_category = cycle_value(cat_ids, self.settings.selected_sprint_category or "any", direction)
 	elseif item == "sprint_seed" and self.selected_mode == "sprint" then
 		self:advance_sprint_seed(direction)
 		return
