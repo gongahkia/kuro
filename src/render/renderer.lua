@@ -180,6 +180,8 @@ function Renderer:draw_wall(camera, sector, wall, color, texture, clip_left, cli
 	love.graphics.line(screen_x1, top1, screen_x2, top2)
 	love.graphics.line(screen_x1, bottom1, screen_x2, bottom2)
 
+	self:updateZbuffer(screen_x1, screen_x2, visible_left, visible_right, start.z, ending.z)
+
 	return {
 		left = visible_left,
 		right = visible_right,
@@ -231,9 +233,39 @@ function Renderer:render_sector(camera, world, sector_id, clip_left, clip_right,
 	visited[sector_id] = nil -- per-branch: allow sector to render through other portals
 end
 
+function Renderer:initZbuffer(width)
+	local zb = self.zbuffer
+	if not zb or #zb ~= width then
+		zb = {}
+		self.zbuffer = zb
+	end
+	for x = 1, width do
+		zb[x] = self.max_depth
+	end
+end
+
+function Renderer:updateZbuffer(screen_x1, screen_x2, visible_left, visible_right, start_z, ending_z)
+	local zb = self.zbuffer
+	if not zb then return end
+	local span = screen_x2 - screen_x1
+	if span < 1 then return end
+	local inv_z1 = 1 / start_z
+	local inv_z2 = 1 / ending_z
+	local col_left = math.max(1, math.floor(visible_left) + 1)
+	local col_right = math.min(#zb, math.floor(visible_right))
+	for x = col_left, col_right do
+		local t = (x - screen_x1) / span
+		local z = 1 / (inv_z1 + t * (inv_z2 - inv_z1))
+		if z < zb[x] then
+			zb[x] = z
+		end
+	end
+end
+
 function Renderer:renderWorld(camera, world, run_state)
 	local lg = love.graphics
 	local width, height = lg.getDimensions()
+	self:initZbuffer(width)
 	local gloom = run_state.blackout_time > 0 and 1.0 or 0.0
 	local floor_color = palette.floor
 	local sky_color = palette.sky
@@ -286,6 +318,7 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 		return left.depth > right.depth
 	end)
 
+	local zb = self.zbuffer
 	for _, sprite in ipairs(sprites) do
 		local entity = sprite.entity
 		local size = (projection * (entity.scale or 0.6)) / sprite.depth
@@ -300,23 +333,48 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 		if sprite.occluded then
 			a = a * (entity.occluded_alpha or 0.4)
 		end
+		local spr_left = math.floor(screen_x - size * 0.5)
+		local spr_right = math.floor(screen_x + size * 0.5)
+		local col_l = math.max(1, spr_left + 1)
+		local col_r = math.min(width, spr_right)
+		-- find visible spans via zbuffer
+		local spans = {}
+		local span_start = nil
+		if zb then
+			for x = col_l, col_r do
+				if sprite.depth < zb[x] then
+					if not span_start then span_start = x end
+				else
+					if span_start then
+						spans[#spans + 1] = { span_start, x - 1 }
+						span_start = nil
+					end
+				end
+			end
+			if span_start then spans[#spans + 1] = { span_start, col_r } end
+		else
+			spans[#spans + 1] = { col_l, col_r }
+		end
+		if #spans == 0 then goto continue end
 		local sprite_data = self.sprites[entity.kind]
 		local anim_name = entity.anim or "idle"
 		local anim = sprite_data and sprite_data[anim_name]
-		if anim then
-			local quad, img, fw, fh = Sprites.get_frame(anim, self.time)
-			local draw_w = size
-			local draw_h = (bottom - top) * (fh / fw)
-			local fade = util.clamp(1.0 - sprite.depth * 0.08 - (run_state.blackout_time > 0 and 0.75 or 0.0) * 0.22, 0.14, 1.0)
-			if sprite.occluded then fade = fade * (entity.occluded_alpha or 0.4) end
-			lg.setColor(fade, fade, fade, a)
-			lg.draw(img, quad, screen_x - draw_w * 0.5, top, 0, draw_w / fw, (bottom - top) / fh)
-		else
-			lg.setColor(r, g, b, a)
-			lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
-			lg.setColor(1, 1, 1, 0.12)
-			lg.rectangle("line", screen_x - size * 0.5, top, size, bottom - top)
+		local prev_scissor = { lg.getScissor() }
+		for _, span in ipairs(spans) do
+			lg.setScissor(span[1] - 1, 0, span[2] - span[1] + 1, height)
+			if anim then
+				local quad, img, fw, fh = Sprites.get_frame(anim, self.time)
+				local fade = util.clamp(1.0 - sprite.depth * 0.08 - (run_state.blackout_time > 0 and 0.75 or 0.0) * 0.22, 0.14, 1.0)
+				if sprite.occluded then fade = fade * (entity.occluded_alpha or 0.4) end
+				lg.setColor(fade, fade, fade, a)
+				lg.draw(img, quad, screen_x - size * 0.5, top, 0, size / fw, (bottom - top) / fh)
+			else
+				lg.setColor(r, g, b, a)
+				lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
+			end
 		end
+		restore_scissor(prev_scissor)
+		::continue::
 	end
 end
 
