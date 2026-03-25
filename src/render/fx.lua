@@ -77,10 +77,26 @@ function FX:get_bob_offset(is_moving)
 	return math.sin(self.bob_phase) * self.bob_amplitude
 end
 
-function FX:apply_camera(camera, is_moving)
+function FX:apply_camera(camera, is_moving, momentum)
 	camera.x = camera.x + self.shake_offset_x * 0.03
 	camera.y = camera.y + self.shake_offset_y * 0.03
 	camera.height = camera.height + self:get_bob_offset(is_moving)
+	if momentum then
+		if momentum:is_airborne() then -- jump arc camera
+			local t = momentum.air_time / 0.4
+			camera.height = camera.height + math.sin(t * math.pi) * 0.06
+		end
+		if momentum.chain_bonus > 1.05 then -- bhop chain increases bob
+			self.bob_amplitude = 0.012 + (momentum.chain_bonus - 1.0) * 0.02
+		else
+			self.bob_amplitude = 0.012
+		end
+		camera.roll = 0
+		if momentum:is_wall_running() then -- wall run tilt
+			local tilt = momentum.wall_run_side == "left" and -0.08 or 0.08
+			camera.roll = tilt
+		end
+	end
 end
 
 function FX:draw_particles()

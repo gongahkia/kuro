@@ -1091,7 +1091,7 @@ function Run:update_player(dt)
 	if self.keys.q then
 		strafe = strafe - 1
 	end
-	if self.keys.e then
+	if self.keys.c then
 		strafe = strafe + 1
 	end
 	if self.keys.a then
@@ -1507,7 +1507,7 @@ function Run:try_burn_dash(charge)
 	if self.keys.q then
 		strafe = strafe - 1
 	end
-	if self.keys.e then
+	if self.keys.c then
 		strafe = strafe + 1
 	end
 	local forward_x = math.cos(self.player.angle)
@@ -2001,7 +2001,7 @@ function Run:draw()
 		angle = self.player.angle + math.sin(self.clock * 1.6) * view_distortion * 0.05,
 		height = self.momentum:is_sliding() and 0.35 or self.player.height,
 	}
-	self.fx:apply_camera(self.camera, self.is_moving)
+	self.fx:apply_camera(self.camera, self.is_moving, self.momentum)
 	self.renderer:draw(self)
 	if self.paused then
 		self.renderer.hud:draw_pause(self, love.graphics)
@@ -2026,9 +2026,9 @@ function Run:keypressed(key)
 	self.keys[key] = true
 	if self.timer_armed and not self.timer_started then
 		local timer_reason = nil
-		if key == "w" or key == "a" or key == "s" or key == "d" or key == "q" or key == "e" then
+		if key == "w" or key == "a" or key == "s" or key == "d" or key == "q" or key == "c" then
 			timer_reason = "movement"
-		elseif key == "space" or key == "f" or key == "g" or key == "lshift" or key == "rshift" or key == "1" or key == "2" or key == "3" then
+		elseif key == "space" or key == "e" or key == "f" or key == "g" or key == "lshift" or key == "rshift" or key == "1" or key == "2" or key == "3" then
 			timer_reason = "action"
 		end
 		if timer_reason then
@@ -2036,6 +2036,8 @@ function Run:keypressed(key)
 		end
 	end
 	if key == "space" then
+		self.momentum:request_jump()
+	elseif key == "e" then
 		self.pending_interact = true
 	elseif key == "1" then
 		self:use_consumable(1)
