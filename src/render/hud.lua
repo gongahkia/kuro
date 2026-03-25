@@ -384,10 +384,12 @@ function HUD:draw_velocity(run_state, lg)
 	elseif speed >= 3 then r, g, b = 0.95, 0.9, 0.3 end
 	lg.setColor(r, g, b)
 	lg.print(string.format("%.1f u/s", speed), width - 140, 12)
-	local tech = run_state.momentum:get_technique()
-	if tech ~= "none" then
-		lg.setColor(0.4, 0.95, 0.8)
-		lg.print(tech, width - 140, 30)
+	if not (run_state.settings and run_state.settings.runner_show_technique_state == false) then
+		local tech = run_state.momentum:get_technique()
+		if tech ~= "none" then
+			lg.setColor(0.4, 0.95, 0.8)
+			lg.print(tech, width - 140, 30)
+		end
 	end
 end
 
@@ -501,6 +503,10 @@ function HUD:draw_pause(run_state, lg)
 				"runner_practice_auto_restart",
 				"runner_show_medal_pace",
 				"runner_show_split_delta",
+				"runner_show_velocity",
+				"runner_show_technique_state",
+				"runner_input_display",
+				"runner_show_ghost_3d",
 			}
 			for i, key in ipairs(toggles) do
 				local val = self.settings[key]
@@ -529,6 +535,10 @@ function HUD:pause_keypressed(key)
 	elseif key == "j" then self:toggle_setting("runner_practice_auto_restart")
 	elseif key == "k" then self:toggle_setting("runner_show_medal_pace")
 	elseif key == "l" then self:toggle_setting("runner_show_split_delta")
+	elseif key == "m" then self:toggle_setting("runner_show_velocity")
+	elseif key == "n" then self:toggle_setting("runner_show_technique_state")
+	elseif key == "o" then self:toggle_setting("runner_input_display")
+	elseif key == "p" then self:toggle_setting("runner_show_ghost_3d")
 	end
 end
 
