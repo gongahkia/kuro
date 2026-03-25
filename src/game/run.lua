@@ -86,6 +86,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		flame_color = options.flame_color or "amber",
 		replay_mode = options.replay_mode == true,
 		settings = settings or {},
+		category = options.category or "any",
 		category_key = options.category_key,
 		events = Events.new(),
 		total_floors = 3,
@@ -231,7 +232,7 @@ function Run.new(difficulty, seed, mutators, settings, options)
 		self.mode_label = "Classic"
 	end
 	if self.mode == "sprint" and self.sprint_ruleset == "official" and not self.category_key then
-		self.category_key = Sprint.category_key(self.difficulty, self.sprint_seed_pack_id, self.sprint_seed_id)
+		self.category_key = Sprint.category_key(self.difficulty, self.sprint_seed_pack_id, self.sprint_seed_id, self.category)
 	end
 	self.events:on("player_damaged", function()
 		self.fx:trigger_shake(0.4, 0.2)
@@ -1583,21 +1584,23 @@ function Run:release_burst()
 	self:try_damage_pillars_in_cone(3.4 + charge * 2.2, math.rad(50), 22 + charge * 18)
 	self.events:emit("burst_released", { charge = charge })
 	self:push_message("[flare-burst] the chamber recoils from the light.")
-	for _, enemy in ipairs(self.world.enemies) do
-		if enemy.alive ~= false then
-			local dx = enemy.x - self.player.x
-			local dy = enemy.y - self.player.y
-			local distance = math.sqrt(dx * dx + dy * dy)
-			local angle_to_enemy = math.atan(dy, dx)
-			local diff = math.abs(((angle_to_enemy - self.player.angle + math.pi) % (math.pi * 2)) - math.pi)
-			if distance <= 2.6 + charge * 2.4 and diff < math.rad(46) then
-				enemy.health = enemy.health - (24 + charge * 18)
-				enemy.alert_time = 3.0
-				if enemy.kind == "leech" then
-					enemy.retreat_time = 1.6
-				end
-				if enemy.health <= 0 then
-					self:handle_enemy_death(enemy)
+	if self.category ~= "pacifist" then
+		for _, enemy in ipairs(self.world.enemies) do
+			if enemy.alive ~= false then
+				local dx = enemy.x - self.player.x
+				local dy = enemy.y - self.player.y
+				local distance = math.sqrt(dx * dx + dy * dy)
+				local angle_to_enemy = math.atan(dy, dx)
+				local diff = math.abs(((angle_to_enemy - self.player.angle + math.pi) % (math.pi * 2)) - math.pi)
+				if distance <= 2.6 + charge * 2.4 and diff < math.rad(46) then
+					enemy.health = enemy.health - (24 + charge * 18)
+					enemy.alert_time = 3.0
+					if enemy.kind == "leech" then
+						enemy.retreat_time = 1.6
+					end
+					if enemy.health <= 0 then
+						self:handle_enemy_death(enemy)
+					end
 				end
 			end
 		end
@@ -1657,8 +1660,9 @@ end
 
 function Run:use_light(dt)
 	self.player.fire_cooldown = math.max(0, self.player.fire_cooldown - dt)
+	local fire_allowed = self.category ~= "pacifist"
 	local propulsion_mode = self.keys.f and self.keys.s -- backward + fire = propulsion
-	if self.keys.f and self.player.fire_cooldown <= 0 and self.player.light_charge > 4 then
+	if fire_allowed and self.keys.f and self.player.fire_cooldown <= 0 and self.player.light_charge > 4 then
 		self.player.light_charge = math.max(0, self.player.light_charge - 24 * dt)
 		self.player.fire_cooldown = 0.04
 		if propulsion_mode then

@@ -474,8 +474,28 @@ function Sprint.get_seed_label(pack_id, seed_id)
 	return string.format("%s (%d)", seed.label, seed.seed)
 end
 
-function Sprint.category_key(difficulty, pack_id, seed_id)
-	return string.format("sprint:%s:%s:%s", difficulty or "stalker", pack_id or Sprint.get_default_pack_id(), seed_id or "unknown")
+function Sprint.category_key(difficulty, pack_id, seed_id, category)
+	local base = string.format("sprint:%s:%s:%s", difficulty or "stalker", pack_id or Sprint.get_default_pack_id(), seed_id or "unknown")
+	if category and category ~= "any" then
+		return base .. ":" .. category
+	end
+	return base
+end
+
+Sprint.categories = {
+	{ id = "any", label = "Any%" },
+	{ id = "pacifist", label = "Pacifist" },
+}
+
+function Sprint.get_pacifist_medal_targets(base_medals)
+	local result = {}
+	for diff, targets in pairs(base_medals) do
+		result[diff] = {}
+		for medal, time in pairs(targets) do
+			result[diff][medal] = math.floor(time * 0.85) -- pacifist is faster (no combat), tighter targets
+		end
+	end
+	return result
 end
 
 function Sprint.get_route_manifest(pack_id, seed_id, floor)
