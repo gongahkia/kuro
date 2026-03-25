@@ -187,29 +187,6 @@ local function mark_path_tags(meta, path, tag)
 	end
 end
 
-local function add_shortcut_marker(meta, cell)
-	meta.decorations = meta.decorations or {}
-	meta.decorations[#meta.decorations + 1] = {
-		kind = "sprint_marker",
-		cell = { x = cell.x, y = cell.y },
-	}
-end
-
-local function add_sprint_shortcut(meta, from_room, to_room, rng)
-	if not from_room or not to_room then
-		return false
-	end
-	local path = carve_corridor(meta, from_room.center, to_room.center, rng, "shortcut")
-	if #path < 4 then
-		return false
-	end
-	add_door_from_path(meta, path, "shortcut")
-	mark_path_tags(meta, path, "shortcut")
-	add_shortcut_marker(meta, path[1])
-	add_shortcut_marker(meta, path[#path])
-	return true
-end
-
 local route_marker_kind = {
 	minimum_torch = "minimum_marker",
 	dark_lane = "dark_marker",
@@ -241,37 +218,103 @@ local function add_route_marker(meta, cell, kind, route_id)
 	}
 end
 
-local function add_route_node(meta, route_id, kind, start_cell, finish_cell, goal)
-	meta.routeNodes = meta.routeNodes or {}
-	meta.routeNodes[route_id] = {
-		id = route_id,
-		kind = kind,
-		start = start_cell and { x = start_cell.x, y = start_cell.y } or nil,
-		finish = finish_cell and { x = finish_cell.x, y = finish_cell.y } or nil,
-		goal = goal or "reach",
-	}
+local function copy_cell(cell)
+	return cell and { x = cell.x, y = cell.y } or nil
 end
 
-local function add_route_path(meta, route_id, kind, from_room, to_room, rng, extra_tags)
+local function sample_path_cells(path, count)
+	local sampled = {}
+	if not path or #path == 0 or (count or 0) <= 0 then
+		return sampled
+	end
+	if #path == 1 then
+		sampled[1] = copy_cell(path[1])
+		return sampled
+	end
+	local seen = {}
+	for index = 1, count do
+		local ratio = count == 1 and 0.5 or ((index - 1) / (count - 1))
+		local path_index = util.clamp(math.floor(1 + ratio * (#path - 1) + 0.5), 1, #path)
+		local cell = path[path_index]
+		local key = cell.x .. ":" .. cell.y
+		if not seen[key] then
+			seen[key] = true
+			sampled[#sampled + 1] = copy_cell(cell)
+		end
+	end
+	return sampled
+end
+
+local function mark_path_ceiling(meta, path, ceiling)
+	if not ceiling then
+		return
+	end
+	for _, cell in ipairs(path or {}) do
+		if meta.cells[cell.y] and meta.cells[cell.y][cell.x] then
+			meta.cells[cell.y][cell.x].ceiling = math.min(meta.cells[cell.y][cell.x].ceiling or ceiling, ceiling)
+		end
+	end
+end
+
+local function add_path_zone(meta, path, kind)
+	meta.sanityZones = meta.sanityZones or { safe = {}, dark = {}, cursed = {} }
+	local tag = kind .. "_zone"
+	local record = {
+		kind = kind,
+		cells = {},
+	}
+	for _, cell in ipairs(path or {}) do
+		if meta.cells[cell.y] and meta.cells[cell.y][cell.x] then
+			meta.cells[cell.y][cell.x].tags[tag] = true
+		end
+		record.cells[#record.cells + 1] = copy_cell(cell)
+	end
+	meta.sanityZones[kind][#meta.sanityZones[kind] + 1] = record
+	return record
+end
+
+local function add_route_node(meta, route_id, kind, start_cell, finish_cell, goal, extra)
+	meta.routeNodes = meta.routeNodes or {}
+	local node = {
+		id = route_id,
+		kind = kind,
+		start = copy_cell(start_cell),
+		finish = copy_cell(finish_cell),
+		goal = goal or "reach",
+	}
+	for key, value in pairs(extra or {}) do
+		node[key] = util.deepcopy(value)
+	end
+	meta.routeNodes[route_id] = node
+end
+
+local function add_route_path(meta, route_id, kind, from_room, to_room, rng, options)
 	if not from_room or not to_room then
 		return nil
 	end
+	options = options or {}
 	local path = carve_corridor(meta, from_room.center, to_room.center, rng, "shortcut")
 	if #path < 4 then
 		return nil
 	end
-	local start_cell = path[math.min(2, #path)] or path[1]
-	local finish_cell = path[#path]
-	add_door_from_path(meta, path, "shortcut")
+	local start_cell = path[util.clamp(options.start_index or math.min(2, #path), 1, #path)] or path[1]
+	local finish_cell = path[util.clamp(options.finish_index or #path, 1, #path)] or path[#path]
+	add_door_from_path(meta, path, options.style or "shortcut")
 	mark_path_tags(meta, path, "shortcut")
-	if extra_tags then
-		for _, tag in ipairs(extra_tags) do
+	if options.tags then
+		for _, tag in ipairs(options.tags) do
 			mark_path_tags(meta, path, tag)
 		end
 	end
+	mark_path_ceiling(meta, path, options.ceiling)
 	add_route_marker(meta, start_cell, kind, route_id)
 	add_route_marker(meta, finish_cell, kind, route_id)
-	add_route_node(meta, route_id, kind, start_cell, finish_cell, "reach")
+	for _, checkpoint in ipairs(options.markers or {}) do
+		add_route_marker(meta, checkpoint, kind, route_id)
+	end
+	local extra = util.deepcopy(options.extra or {})
+	extra.path = util.deepcopy(path)
+	add_route_node(meta, route_id, kind, start_cell, finish_cell, options.goal or "reach", extra)
 	return path
 end
 
@@ -294,20 +337,36 @@ local function apply_standard_sprint_routes(meta, main_rooms, candidate_rooms, r
 		return
 	end
 
-	local minimum_room = candidate_rooms[util.clamp(manifest.minimum_torch_room or 1, 1, #candidate_rooms)]
+	local minimum = manifest.minimum_torch or {}
+	local minimum_room = candidate_rooms[util.clamp(minimum.pickup_room or 1, 1, #candidate_rooms)]
+	local bonus_room = candidate_rooms[util.clamp((minimum.bonus_room or minimum.bailout_room or #candidate_rooms), 1, #candidate_rooms)]
 	if minimum_room then
 		mark_room_tags(meta, minimum_room, "minimum_line")
 		local route_id = string.format("minimum_torch_%d", floor)
+		local from_room = main_rooms[util.clamp(minimum.path_from_main or math.min(#main_rooms, 2), 1, #main_rooms)]
 		local pickup = find_room_pickup(meta, minimum_room, "torch")
 		if pickup then
 			pickup.route_role = "minimum_torch"
 			pickup.route_id = route_id
+			pickup.route_budget = minimum.torch_budget or 1
 			add_route_marker(meta, pickup.cell, "minimum_torch", route_id)
-			add_route_node(meta, route_id, "minimum_torch", main_rooms[math.min(#main_rooms, 2)].center, pickup.cell, "collect_pickup")
+			local bailout_cell = bonus_room and copy_cell(bonus_room.center) or nil
+			add_route_node(meta, route_id, "minimum_torch", from_room and from_room.center or pickup.cell, pickup.cell, "collect_pickup", {
+				torch_budget = minimum.torch_budget or 1,
+				bailout = bailout_cell,
+			})
+			if from_room and from_room ~= minimum_room then
+				local guide_path = carve_corridor(meta, from_room.center, minimum_room.center, rng, "minimum_line")
+				mark_path_tags(meta, guide_path, "minimum_line")
+			end
+			if bonus_room and bonus_room ~= minimum_room then
+				local bailout_path = carve_corridor(meta, minimum_room.center, bonus_room.center, rng, "minimum_bailout")
+				mark_path_tags(meta, bailout_path, "minimum_bailout")
+				add_route_marker(meta, bonus_room.center, "minimum_torch", route_id)
+			end
 		end
 	end
 
-	local bonus_room = candidate_rooms[util.clamp(manifest.bonus_room or #candidate_rooms, 1, #candidate_rooms)]
 	if bonus_room then
 		local bonus_cell = pick_room_cell(bonus_room, rng, reserved)
 		meta.pickups[#meta.pickups + 1] = {
@@ -315,13 +374,15 @@ local function apply_standard_sprint_routes(meta, main_rooms, candidate_rooms, r
 			cell = { x = bonus_cell.x, y = bonus_cell.y },
 			route_role = "bonus_torch",
 			optional = true,
+			route_id = string.format("minimum_torch_%d", floor),
 		}
 		reserved[bonus_cell.x .. ":" .. bonus_cell.y] = true
 		mark_room_tags(meta, bonus_room, "safe_bonus")
 	end
 
-	local dark_lane = manifest.dark_lane
+	local dark_lane = manifest.dark_lane or {}
 	if dark_lane then
+		local bailout_room = candidate_rooms[util.clamp(dark_lane.bailout_room or #candidate_rooms, 1, #candidate_rooms)]
 		local path = add_route_path(
 			meta,
 			string.format("dark_lane_%d", floor),
@@ -329,39 +390,92 @@ local function apply_standard_sprint_routes(meta, main_rooms, candidate_rooms, r
 			candidate_rooms[util.clamp(dark_lane.from_candidate or 1, 1, #candidate_rooms)],
 			main_rooms[util.clamp(dark_lane.to_main or #main_rooms, 1, #main_rooms)],
 			rng,
-			{ "dark_lane", "dark_zone" }
+			{
+				style = "dark_lane",
+				tags = { "dark_lane", "dark_zone" },
+				ceiling = dark_lane.visibility_ceiling or 0.96,
+				extra = {
+					drain_mult = dark_lane.drain_mult or 1.7,
+					bailout = bailout_room and copy_cell(bailout_room.center) or nil,
+				},
+			}
 		)
 		if path then
-			for _, cell in ipairs(path) do
-				meta.cells[cell.y][cell.x].tags.dark_zone = true
+			add_path_zone(meta, path, "dark")
+			if bailout_room then
+				local pivot = path[math.max(2, math.floor(#path * 0.5))]
+				local bailout_path = carve_corridor(meta, pivot, bailout_room.center, rng, "dark_lane_bailout")
+				mark_path_tags(meta, bailout_path, "dark_lane_bailout")
+				mark_room_tags(meta, bailout_room, "safe_bonus")
+				add_route_marker(meta, pivot, "dark_lane", string.format("dark_lane_%d", floor))
 			end
 		end
 	end
 
-	local flare_line = manifest.flare_line
+	local flare_line = manifest.flare_line or {}
 	if flare_line then
-		add_route_path(
+		local route_id = string.format("flare_line_%d", floor)
+		local path = add_route_path(
 			meta,
-			string.format("flare_line_%d", floor),
+			route_id,
 			"flare_line",
 			main_rooms[util.clamp(flare_line.from_main or 2, 1, #main_rooms)],
 			candidate_rooms[util.clamp(flare_line.to_candidate or 1, 1, #candidate_rooms)],
 			rng,
-			{ "flare_line" }
+			{
+				style = "flare_line",
+				tags = { "flare_line" },
+			}
 		)
+		if path then
+			local checkpoints = sample_path_cells(path, flare_line.checkpoint_count or 2)
+			for _, checkpoint in ipairs(checkpoints) do
+				if meta.cells[checkpoint.y] and meta.cells[checkpoint.y][checkpoint.x] then
+					meta.cells[checkpoint.y][checkpoint.x].tags.flare_checkpoint = true
+				end
+				add_route_marker(meta, checkpoint, "flare_line", route_id)
+			end
+			add_route_node(meta, route_id, "flare_line", path[math.min(2, #path)] or path[1], path[#path], "reach", {
+				path = util.deepcopy(path),
+				checkpoints = checkpoints,
+				boost_window = flare_line.boost_window or 1.1,
+				boost_extension = flare_line.boost_extension or 0.32,
+				speed_mult = flare_line.speed_mult or 1.46,
+			})
+		end
 	end
 
-	local burn_lane = manifest.burn_lane
+	local burn_lane = manifest.burn_lane or {}
 	if burn_lane then
-		add_route_path(
+		local route_id = string.format("burn_lane_%d", floor)
+		local path = add_route_path(
 			meta,
-			string.format("burn_lane_%d", floor),
+			route_id,
 			"burn_lane",
 			candidate_rooms[util.clamp(burn_lane.from_candidate or 1, 1, #candidate_rooms)],
 			main_rooms[util.clamp(burn_lane.to_main or #main_rooms, 1, #main_rooms)],
 			rng,
-			{ "burn_lane" }
+			{
+				style = "burn_lane",
+				tags = { "burn_lane" },
+			}
 		)
+		if path then
+			local gates = sample_path_cells(path, burn_lane.gate_count or 2)
+			for _, gate in ipairs(gates) do
+				if meta.cells[gate.y] and meta.cells[gate.y][gate.x] then
+					meta.cells[gate.y][gate.x].tags.burn_gate = true
+				end
+				add_route_marker(meta, gate, "burn_lane", route_id)
+			end
+			add_route_node(meta, route_id, "burn_lane", path[math.min(2, #path)] or path[1], path[#path], "reach", {
+				path = util.deepcopy(path),
+				gate_cells = gates,
+				min_charge = burn_lane.min_charge or 0.72,
+				dash_extension = burn_lane.dash_extension or 0.08,
+				light_refund = burn_lane.light_refund or 4,
+			})
+		end
 	end
 end
 
@@ -377,11 +491,13 @@ local function apply_boss_sprint_route(meta, boss_room, manifest)
 	if primary then
 		primary.route_role = "pillar_route"
 		primary.weaken_bonus = route.weaken_bonus or 0.6
+		primary.route_priority = 1
 		add_route_marker(meta, primary.cell, "pillar_route", "pillar_route_3")
 	end
 	if secondary then
 		secondary.route_role = "pillar_route"
 		secondary.weaken_bonus = math.max(0.4, (route.weaken_bonus or 0.6) - 0.18)
+		secondary.route_priority = 2
 		add_route_marker(meta, secondary.cell, "pillar_route", "pillar_route_3")
 	end
 
@@ -389,14 +505,31 @@ local function apply_boss_sprint_route(meta, boss_room, manifest)
 	for priority, anchor_index in ipairs(anchor_order) do
 		if meta.anchors[anchor_index] then
 			meta.anchors[anchor_index].route_priority = priority
+			meta.anchors[anchor_index].route_anchor = true
 			meta.cells[meta.anchors[anchor_index].cell.y][meta.anchors[anchor_index].cell.x].tags.pillar_route = true
+			add_route_marker(meta, meta.anchors[anchor_index].cell, "pillar_route", "pillar_route_3")
 		end
 	end
 
 	if boss_room and first_anchor then
 		local path = carve_corridor(meta, boss_room.center, first_anchor.cell, RNG.new((boss_room.center.x + boss_room.center.y) * 97), "pillar_route")
 		mark_path_tags(meta, path, "pillar_route")
-		add_route_node(meta, "pillar_route_3", "pillar_route", boss_room.center, first_anchor.cell, "pillar_anchor")
+		add_route_node(meta, "pillar_route_3", "pillar_route", boss_room.center, first_anchor.cell, "pillar_anchor", {
+			path = util.deepcopy(path),
+			anchor_order = util.deepcopy(anchor_order),
+			pillar_cells = {
+				copy_cell(primary and primary.cell or nil),
+				copy_cell(secondary and secondary.cell or nil),
+			},
+			anchor_cells = {
+				copy_cell(meta.anchors[anchor_order[1] or 1] and meta.anchors[anchor_order[1] or 1].cell or nil),
+				copy_cell(meta.anchors[anchor_order[2] or 1] and meta.anchors[anchor_order[2] or 1].cell or nil),
+				copy_cell(meta.anchors[anchor_order[3] or 1] and meta.anchors[anchor_order[3] or 1].cell or nil),
+			},
+			hazard_mult = route.hazard_mult or 0.76,
+			anchor_range_bonus = route.anchor_range_bonus or 0.7,
+			anchor_restore = route.anchor_restore or 12,
+		})
 		add_route_marker(meta, first_anchor.cell, "pillar_route", "pillar_route_3")
 	end
 end
@@ -737,9 +870,6 @@ local function build_boss_floor(config, rng, options)
 	add_door_from_path(meta, carve_corridor(meta, hall.center, chapel.center, rng, "corridor"), "shrine")
 	add_door_from_path(meta, carve_corridor(meta, hall.center, ante.center, rng, "corridor"), "steel")
 	carve_corridor(meta, ante.center, boss.center, rng, "boss")
-	if options.mode == "sprint" and options.sprint_seed_pack_id and options.sprint_seed_id then
-		add_sprint_shortcut(meta, chapel, ante, rng)
-	end
 
 	meta.spawn = {
 		cell = { x = start.center.x, y = start.center.y },
