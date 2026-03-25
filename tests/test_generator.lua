@@ -50,7 +50,7 @@ return {
 		assert(found_consumable, "expected at least one consumable pickup")
 	end,
 
-	["official sprint floors expose shortcut doors and markers"] = function()
+	["official sprint floors expose authored route nodes and markers"] = function()
 		local world = Generator.generate("stalker", 41017, 1, {}, {
 			mode = "sprint",
 			sprint_ruleset = "official",
@@ -66,11 +66,20 @@ return {
 		end
 		assert(found_shortcut, "expected official sprint shortcut door")
 		local found_marker = false
+		local found_route_node = world.routeNodes and world.routeNodes.burn_lane_1 ~= nil
 		for _, decoration in ipairs(world.decorations or {}) do
-			if decoration.kind == "sprint_marker" then
+			if decoration.kind == "burn_marker" or decoration.kind == "minimum_marker" or decoration.kind == "dark_marker" or decoration.kind == "flare_marker" then
 				found_marker = true
 			end
 		end
 		assert(found_marker, "expected sprint shortcut markers")
+		assert(found_route_node, "expected authored route node")
+		local found_optional_torch = false
+		for _, pickup in ipairs(world.pickups) do
+			if pickup.kind == "torch" and pickup.optional == true then
+				found_optional_torch = true
+			end
+		end
+		assert(found_optional_torch, "expected optional bonus torch route")
 	end,
 }
