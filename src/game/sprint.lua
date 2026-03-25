@@ -891,4 +891,47 @@ function Sprint.update_practice_record(records, summary)
 	return records, current
 end
 
+function Sprint.export_leaderboard_entry(summary, record)
+	if not summary then return nil end
+	local splits = {}
+	for _, s in ipairs(summary.splits or {}) do
+		splits[#splits + 1] = { id = s.id, time = s.time }
+	end
+	local entry = {
+		category_key = summary.category_key or "",
+		category = summary.category or "any",
+		time = summary.duration or 0,
+		splits = splits,
+		medal = record and record.medal or nil,
+		seed = summary.seed,
+		difficulty = summary.difficulty_id or summary.difficulty_key or "",
+		pack_id = summary.sprint_seed_pack_id or "",
+		seed_id = summary.sprint_seed_id or "",
+		build_id = summary.build_id or "",
+		date = summary.recording_date or os.date("%Y-%m-%d"),
+		replay_hash = summary.replay_hash or "",
+	}
+	local parts = {}
+	for k, v in pairs(entry) do
+		if type(v) == "table" then
+			local items = {}
+			for _, item in ipairs(v) do
+				if type(item) == "table" then
+					local sub = {}
+					for sk, sv in pairs(item) do
+						sub[#sub + 1] = string.format('"%s":%s', sk, type(sv) == "string" and string.format('"%s"', sv) or tostring(sv))
+					end
+					items[#items + 1] = "{" .. table.concat(sub, ",") .. "}"
+				end
+			end
+			parts[#parts + 1] = string.format('"%s":[%s]', k, table.concat(items, ","))
+		elseif type(v) == "string" then
+			parts[#parts + 1] = string.format('"%s":"%s"', k, v)
+		else
+			parts[#parts + 1] = string.format('"%s":%s', k, tostring(v))
+		end
+	end
+	return "{" .. table.concat(parts, ",") .. "}"
+end
+
 return Sprint
