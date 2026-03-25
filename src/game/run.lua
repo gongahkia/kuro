@@ -314,7 +314,13 @@ function Run:summary()
 		tech_usage = {
 			burn_dashes = self.stats.burn_dashes or 0,
 			flare_boosts = self.stats.flare_boosts or 0,
+			slides = self.momentum and self.momentum.stats.slides or 0,
+			bhops = self.momentum and self.momentum.stats.bhops or 0,
+			wall_runs = self.momentum and self.momentum.stats.wall_runs or 0,
+			chains = self.momentum and self.momentum.stats.chains or 0,
+			propulsions = self.stats.propulsions or 0,
 		},
+		category = self.category,
 		route_events = util.deepcopy(self.route_events),
 	}
 end
