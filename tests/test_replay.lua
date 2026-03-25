@@ -40,18 +40,46 @@ local suite = {
 	["replay records saves and inspects context"] = function()
 		Replay.init()
 		Replay.start_recording(12345, "stalker", {
-			mode = "daily",
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_id = "ember_arc",
 			loadout = "scout",
 		})
 		Replay.record_key_state("w", true, 0.1)
+		Replay.record_ghost_frame(0.1, 1, 2.5, 3.5)
+		Replay.record_ghost_frame(0.4, 1, 3.0, 4.0)
+		Replay.set_summary({
+			splits = {
+				{ id = "floor_1_clear", label = "Floor 1 Clear", floor = 1, time = 45.5, delta = -1.2 },
+			},
+			category_key = "sprint:stalker:black_flame_circuit:ember_arc",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			sprint_ruleset = "official",
+			medal = "gold",
+			tech_usage = {
+				burn_dashes = 2,
+				flare_boosts = 1,
+			},
+		})
+		Replay.set_metadata({
+			pb = true,
+			restart_reason = "pb_finish",
+		})
 		Replay.record_key_state("w", false, 0.6)
 		Replay.stop_recording()
 
 		assert(Replay.save("spec_run"), "expected replay save")
 		local replay = Replay.inspect("spec_run")
 		assert(replay.seed == 12345, "expected replay seed")
-		assert(replay.context.mode == "daily", "expected replay mode context")
+		assert(replay.context.mode == "sprint", "expected replay mode context")
+		assert(replay.context.sprint_seed_id == "ember_arc", "expected sprint seed context")
 		assert(replay.context.loadout == "scout", "expected replay loadout context")
+		assert(replay.metadata.pb == true, "expected pb metadata")
+		assert(replay.metadata.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected category metadata")
+		assert(replay.metadata.tech_usage.burn_dashes == 2, "expected tech usage metadata")
+		assert(#replay.splits == 1, "expected split table persistence")
+		assert(#replay.ghost_frames == 2, "expected stored ghost frames")
 	end,
 
 	["replay playback returns inputs in order"] = function()
