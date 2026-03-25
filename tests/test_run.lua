@@ -89,6 +89,23 @@ return {
 		assert(run.category_key == "sprint:stalker:black_flame_circuit:ember_arc", "expected sprint category key")
 	end,
 
+	["official sprint timer starts on first movement input"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "official",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			official_record_eligible = true,
+		})
+		run:update(0.5)
+		assert(run.clock == 0, "expected timer to stay armed before movement")
+		run:keypressed("w")
+		run:update(0.25)
+		assert(run.timer_started == true, "expected timer start after movement")
+		assert(run.timer_start_reason == "movement", "expected movement start reason")
+		assert(run.clock == 0.25, "expected timer to advance after start")
+	end,
+
 	["burn dash and flare boost raise speed tech stats"] = function()
 		local run = Run.new("stalker", 55)
 		run.keys.w = true
@@ -112,12 +129,26 @@ return {
 		local run = Run.new("stalker", 41017, {}, nil, {
 			mode = "sprint",
 			sprint_ruleset = "practice",
-			practice_floor = 3,
+			practice_target = "floor:3",
 			start_floor = 3,
 			loadout = "default",
 		})
 		assert(run.floor == 3, "expected direct practice floor start")
 		assert(run.stats.floors_cleared >= 2, "expected prior floors counted for practice")
 		assert(run.player.consumables[1] ~= nil, "expected practice consumable snapshot")
+	end,
+
+	["drill practice starts at authored route nodes"] = function()
+		local run = Run.new("stalker", 41017, {}, nil, {
+			mode = "sprint",
+			sprint_ruleset = "practice",
+			sprint_seed_pack_id = "black_flame_circuit",
+			sprint_seed_id = "ember_arc",
+			practice_target = "drill:black_flame_circuit:ember_arc:flare_line",
+			start_floor = 2,
+		})
+		assert(run.practice_goal ~= nil, "expected drill practice goal")
+		assert(run.practice_goal.route_id == "flare_line_2", "expected flare line route id")
+		assert(run.player.x ~= run.world.spawn.x or run.player.y ~= run.world.spawn.y, "expected drill reposition from spawn")
 	end,
 }
