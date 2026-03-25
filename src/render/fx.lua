@@ -2,6 +2,7 @@ local util = require("src.core.util")
 
 local FX = {}
 FX.__index = FX
+local JUMP_ARC_TIME = 0.65
 
 function FX.new(settings)
 	return setmetatable({
@@ -77,14 +78,24 @@ function FX:get_bob_offset(is_moving)
 	return math.sin(self.bob_phase) * self.bob_amplitude
 end
 
+function FX:get_sway_offset(is_moving)
+	if not self.settings.footstep_bob or not is_moving then return 0 end
+	return math.cos(self.bob_phase * 0.5) * self.bob_amplitude * 0.6
+end
+
 function FX:apply_camera(camera, is_moving, momentum)
 	camera.x = camera.x + self.shake_offset_x * 0.03
 	camera.y = camera.y + self.shake_offset_y * 0.03
 	camera.height = camera.height + self:get_bob_offset(is_moving)
+	local sway = self:get_sway_offset(is_moving)
+	local right_x = -math.sin(camera.angle)
+	local right_y = math.cos(camera.angle)
+	camera.x = camera.x + right_x * sway
+	camera.y = camera.y + right_y * sway
 	if momentum then
 		if momentum:is_airborne() then -- jump arc camera
-			local t = momentum.air_time / 0.4
-			camera.height = camera.height + math.sin(t * math.pi) * 0.06
+			local t = momentum.air_time / JUMP_ARC_TIME
+			camera.height = camera.height + math.sin(t * math.pi) * 0.12
 		end
 		if momentum.chain_bonus > 1.05 then -- bhop chain increases bob
 			self.bob_amplitude = 0.012 + (momentum.chain_bonus - 1.0) * 0.02

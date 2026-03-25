@@ -3,26 +3,26 @@ local util = require("src.core.util")
 local Momentum = {}
 Momentum.__index = Momentum
 
-local GROUND_FRICTION = 12.0
-local AIR_FRICTION = 0.3
-local SLIDE_FRICTION = 1.2
+local GROUND_FRICTION = 6.0
+local AIR_FRICTION = 0.15
+local SLIDE_FRICTION = 0.8
 local WALL_RUN_FRICTION = 0.0
 local SLIDE_DURATION = 0.7
 local SLIDE_BURST = 1.15
 local SLIDE_MIN_SPEED = 2.0
-local JUMP_AIR_TIME = 0.4
+local JUMP_AIR_TIME = 0.65
 local BHOP_WINDOW = 0.1
 local BHOP_BONUS = 0.08
 local MAX_CHAIN = 2.5
 local CHAIN_DECAY_TIME = 1.5
-local AIR_STRAFE_ACCEL = 6.0
+local AIR_STRAFE_ACCEL = 8.0
 local WALL_RUN_MAX_TIME = 1.2
 local WALL_RUN_SPEED_MULT = 1.1
 local WALL_DETECT_DIST = 0.23 -- radius + 0.05
 local WALL_ANGLE_THRESHOLD = math.rad(15)
 local WALL_KICK_SPEED = 3.0
 local PROPULSION_ACCEL = 4.0
-local BASE_SPEED_CAP = 2.6 -- matches move_speed
+local BASE_SPEED_CAP = 4.0 -- matches move_speed
 
 function Momentum.new()
 	return setmetatable({

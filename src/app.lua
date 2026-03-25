@@ -854,7 +854,9 @@ function App:draw_title()
 		{ key = "quit", label = "Quit" },
 	}
 
-	local start_y = height * 0.33
+	local menu_spacing = 22
+	local menu_block = #items * menu_spacing
+	local start_y = math.min(height * 0.33, height * 0.5 - menu_block * 0.5 - 20)
 	for index, item in ipairs(items) do
 		local disabled = (item.key == "sprint_ruleset" and self.selected_mode ~= "sprint")
 			or (item.key == "sprint_pack" and self.selected_mode ~= "sprint")
@@ -867,33 +869,34 @@ function App:draw_title()
 		if index == self.title_index then
 			text = "> " .. text .. " <"
 		end
-		draw_centered(lg, text, start_y + (index - 1) * 24, width, color)
+		draw_centered(lg, text, start_y + (index - 1) * menu_spacing, width, color)
 	end
 
-	draw_centered(lg, string.format("HP %d  View %.1f  Threat %d  Torches %d  Flares %d", preview.hp, preview.view_distance, preview.threat_budget, preview.torch_goal, preview.flares), height * 0.67, width, { 0.55, 0.58, 0.64, 1.0 })
+	local info_y = start_y + menu_block + 12
+	draw_centered(lg, string.format("HP %d  View %.1f  Threat %d  Torches %d  Flares %d", preview.hp, preview.view_distance, preview.threat_budget, preview.torch_goal, preview.flares), info_y, width, { 0.55, 0.58, 0.64, 1.0 })
 	if config.mode == "daily" and config.daily_label then
 		local best = self.settings.daily_records[config.daily_label]
-		draw_centered(lg, string.format("Daily Seed %d  Best %s", config.seed, best and format_time(best) or "none"), height * 0.72, width, { 0.66, 0.82, 0.96, 1.0 })
+		draw_centered(lg, string.format("Daily Seed %d  Best %s", config.seed, best and format_time(best) or "none"), info_y + 20, width, { 0.66, 0.82, 0.96, 1.0 })
 	elseif config.mode == "time_attack" then
 		local best = self.settings.time_attack_records[config.difficulty]
-		draw_centered(lg, string.format("Seed %d  Best %s", config.seed, best and format_time(best) or "none"), height * 0.72, width, { 0.95, 0.8, 0.28, 1.0 })
+		draw_centered(lg, string.format("Seed %d  Best %s", config.seed, best and format_time(best) or "none"), info_y + 20, width, { 0.95, 0.8, 0.28, 1.0 })
 	elseif config.mode == "sprint" and config.sprint_ruleset == "official" then
 		local record = self:get_sprint_record(config)
 		local seed = Sprint.get_seed(config.sprint_seed_pack_id, config.sprint_seed_id)
 		local best_time = record and record.best_time and format_time(record.best_time) or "none"
 		local best_medal = record and (record.best_medal or record.medal) or "none"
 		local best_possible = record and record.best_possible_time and format_time(record.best_possible_time) or "--"
-		draw_centered(lg, string.format("%s  PB %s  Medal %s  Best Possible %s", seed.label, best_time, best_medal, best_possible), height * 0.72, width, { 0.94, 0.88, 0.42, 1.0 })
+		draw_centered(lg, string.format("%s  PB %s  Medal %s  Best Possible %s", seed.label, best_time, best_medal, best_possible), info_y + 20, width, { 0.94, 0.88, 0.42, 1.0 })
 		local warnings = table.concat(sprint_warning_parts(record and record.best_time_pack_version, config.pack_version, record and record.mixed_split_versions), "  ")
 		if warnings ~= "" then
-			draw_centered(lg, warnings, height * 0.75, width, { 0.72, 0.9, 1.0, 1.0 })
+			draw_centered(lg, warnings, info_y + 40, width, { 0.72, 0.9, 1.0, 1.0 })
 		end
 	else
-		draw_centered(lg, config.mode == "sprint" and string.format("Practice Seed %d  Target %s", config.seed, config.practice_target_label or self:get_practice_target_label()) or ("Seed: " .. tostring(config.seed)), height * 0.72, width, { 0.82, 0.84, 0.88, 1.0 })
+		draw_centered(lg, config.mode == "sprint" and string.format("Practice Seed %d  Target %s", config.seed, config.practice_target_label or self:get_practice_target_label()) or ("Seed: " .. tostring(config.seed)), info_y + 20, width, { 0.82, 0.84, 0.88, 1.0 })
 	end
-	draw_centered(lg, "Mutators: " .. (#mutators > 0 and table.concat(mutators, ", ") or (self:is_sprint_official() and "Locked Off" or "None")), height * 0.77, width, { 0.82, 0.84, 0.88, 1.0 })
-	draw_centered(lg, "Toggle mutators [Z/X/C] base  [B] Blacklight  [I] Ironman", height * 0.82, width, { 0.5, 0.52, 0.58, 1.0 })
-	draw_centered(lg, "Up/Down select  Left/Right adjust  Enter confirm or browse target  N seed action", height * 0.87, width, { 0.5, 0.52, 0.58, 1.0 })
+	draw_centered(lg, "Mutators: " .. (#mutators > 0 and table.concat(mutators, ", ") or (self:is_sprint_official() and "Locked Off" or "None")), info_y + 42, width, { 0.82, 0.84, 0.88, 1.0 })
+	draw_centered(lg, "Toggle mutators [Z/X/C] base  [B] Blacklight  [I] Ironman", info_y + 62, width, { 0.5, 0.52, 0.58, 1.0 })
+	draw_centered(lg, "Up/Down select  Left/Right adjust  Enter confirm or browse target  N seed action", info_y + 80, width, { 0.5, 0.52, 0.58, 1.0 })
 	draw_centered(lg, "Loadouts: " .. table.concat((function()
 		local values = {}
 		for _, entry in ipairs(loadouts) do values[#values + 1] = entry.id end
@@ -902,7 +905,7 @@ function App:draw_title()
 		local values = {}
 		for _, entry in ipairs(flames) do values[#values + 1] = entry.id end
 		return values
-	end)(), ", "), height * 0.92, width, { 0.42, 0.44, 0.5, 1.0 })
+	end)(), ", "), info_y + 98, width, { 0.42, 0.44, 0.5, 1.0 })
 end
 
 function App:draw_progression()

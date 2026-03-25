@@ -1,8 +1,8 @@
 local profiles = {
 	apprentice = {
 		label = "Apprentice",
-		map_width = 28,
-		map_height = 16,
+		map_width = 48,
+		map_height = 28,
 		torch_goal = 3,
 		threat_budget = 4,
 		player_health = 7,
@@ -10,8 +10,8 @@ local profiles = {
 	},
 	stalker = {
 		label = "Stalker",
-		map_width = 32,
-		map_height = 18,
+		map_width = 54,
+		map_height = 32,
 		torch_goal = 4,
 		threat_budget = 6,
 		player_health = 5,
@@ -19,8 +19,8 @@ local profiles = {
 	},
 	nightmare = {
 		label = "Nightmare",
-		map_width = 36,
-		map_height = 20,
+		map_width = 60,
+		map_height = 36,
 		torch_goal = 5,
 		threat_budget = 8,
 		player_health = 4,

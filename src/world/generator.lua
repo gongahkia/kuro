@@ -584,8 +584,8 @@ local function build_standard_floor(config, rng, options)
 	local main_count = 5 + config.floor
 
 	for index = 1, main_count do
-		local room_w = rng:int(3, 4)
-		local room_h = rng:int(3, 5)
+		local room_w = rng:int(5, 8)
+		local room_h = rng:int(5, 8)
 		local y = util.clamp(mid_y - math.floor(room_h * 0.5) + rng:int(-2, 2), 2, config.map_height - room_h - 1)
 		local x = util.clamp(x_cursor, 2, config.map_width - room_w - 1)
 		local kind = index == 1 and "start" or (index == main_count and "exit" or "main")
@@ -597,7 +597,7 @@ local function build_standard_floor(config, rng, options)
 				add_door_from_path(meta, path, "steel")
 			end
 		end
-		x_cursor = x + room_w + rng:int(2, 3)
+		x_cursor = x + room_w + rng:int(2, 4)
 	end
 
 	local branches = {}
@@ -605,8 +605,8 @@ local function build_standard_floor(config, rng, options)
 	while #branches < config.torch_goal + 1 and attempts < 32 do
 		attempts = attempts + 1
 		local base = main_rooms[rng:int(2, #main_rooms - 1)]
-		local room_w = rng:int(3, 4)
-		local room_h = rng:int(3, 4)
+		local room_w = rng:int(4, 6)
+		local room_h = rng:int(4, 6)
 		local direction = rng:chance(0.5) and -1 or 1
 		local branch_x = util.clamp(base.center.x - math.floor(room_w * 0.5) + rng:int(-1, 1), 2, config.map_width - room_w - 1)
 		local branch_y = direction < 0 and base.y - room_h - rng:int(2, 4) or base.y + base.h + rng:int(2, 4)
@@ -761,6 +761,20 @@ local function build_standard_floor(config, rng, options)
 				}
 			end
 		end
+	end
+
+	-- vending machines in main rooms
+	local vm_count = rng:int(1, 3)
+	for _ = 1, vm_count do
+		local room = main_rooms[rng:int(2, math.max(2, #main_rooms - 1))]
+		local cell = pick_room_cell(room, rng, reserved)
+		meta.decorations[#meta.decorations + 1] = {
+			kind = "vending_machine",
+			cell = { x = cell.x, y = cell.y },
+			x = cell.x - 0.5,
+			y = cell.y - 0.5,
+		}
+		reserved[cell.x .. ":" .. cell.y] = true
 	end
 
 	-- ration placement (1-2 per floor)

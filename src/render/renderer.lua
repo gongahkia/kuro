@@ -369,8 +369,17 @@ function Renderer:renderSprites(camera, world, entities, run_state)
 				lg.setColor(fade, fade, fade, a)
 				lg.draw(img, quad, screen_x - size * 0.5, top, 0, size / fw, (bottom - top) / fh)
 			else
+				local item_size = size * 0.35
+				local cy = (top + bottom) * 0.5
+				local bob = math.sin(self.time * 3.0 + sprite.depth) * item_size * 0.15
+				lg.setColor(r, g, b, a * 0.3)
+				lg.circle("fill", screen_x, cy + bob, item_size * 0.8)
 				lg.setColor(r, g, b, a)
-				lg.rectangle("fill", screen_x - size * 0.5, top, size, bottom - top)
+				lg.polygon("fill",
+					screen_x, cy - item_size + bob,
+					screen_x + item_size * 0.6, cy + bob,
+					screen_x, cy + item_size + bob,
+					screen_x - item_size * 0.6, cy + bob)
 			end
 		end
 		restore_scissor(prev_scissor)
@@ -465,8 +474,9 @@ function Renderer:draw(run_state)
 					kind = deco.kind,
 					x = deco.x,
 					y = deco.y,
-					scale = deco.kind == "corpse" and 0.5
-						or ((deco.kind == "sprint_marker" or deco.kind == "minimum_marker" or deco.kind == "dark_marker" or deco.kind == "flare_marker" or deco.kind == "burn_marker" or deco.kind == "pillar_marker") and 0.42 or 0.3),
+					scale = deco.kind == "vending_machine" and 0.7
+						or (deco.kind == "corpse" and 0.5
+						or ((deco.kind == "sprint_marker" or deco.kind == "minimum_marker" or deco.kind == "dark_marker" or deco.kind == "flare_marker" or deco.kind == "burn_marker" or deco.kind == "pillar_marker") and 0.42 or 0.3)),
 					active = true,
 				}
 			end
