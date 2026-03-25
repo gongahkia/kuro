@@ -61,6 +61,13 @@ local function format_time(seconds)
 	return string.format("%02d:%05.2f", minutes, secs)
 end
 
+local function format_delta(delta)
+	if delta == nil then
+		return "--"
+	end
+	return string.format("%+.2fs", delta)
+end
+
 function App.new()
 	return setmetatable({
 		screen = "title",
@@ -433,8 +440,12 @@ function App:save_replay_snapshot(reason, filename, extra_metadata)
 		pack_version = summary.pack_version or "",
 		practice_target = summary.practice_target or "",
 		timer_start_reason = summary.timer_start_reason or "",
+		best_possible_time = summary.best_possible_time or 0,
+		replay_file = filename or "",
 		tech_usage = summary.tech_usage or {},
 		route_events = summary.route_events or {},
+		gold_splits = summary.gold_splits or {},
+		projected_saves = summary.projected_saves or {},
 	})
 	local ok = Replay.save(filename)
 	if ok then
@@ -472,6 +483,10 @@ function App:record_result(outcome)
 				self.settings.time_attack_records[key] = self.last_summary.duration
 			end
 		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "official" then
+			local finish_replay = Replay.result_filename(self.last_summary.category_key, os.time())
+			if not self:save_replay_snapshot("official_finish", finish_replay, { pb = false, quiet = true }) then
+				finish_replay = nil
+			end
 			local records, sprint_result = Sprint.update_record(self.settings.sprint_records, self.last_summary)
 			self.settings.sprint_records = records
 			local pb_name = nil
@@ -484,7 +499,7 @@ function App:record_result(outcome)
 				end
 			end
 			self.last_sprint_record = sprint_result
-			self:export_sprint_summary(self.last_summary, sprint_result, pb_name)
+			self:export_sprint_summary(self.last_summary, sprint_result, finish_replay)
 		elseif self.last_summary.mode == "sprint" and self.last_summary.sprint_ruleset == "practice" then
 			local records = self.settings.sprint_practice_records or {}
 			local updated_records = Sprint.update_practice_record(records, self.last_summary)
@@ -628,23 +643,53 @@ function App:export_sprint_summary(summary, sprint_result, replay_filename)
 	if not summary or summary.mode ~= "sprint" or summary.sprint_ruleset ~= "official" then
 		return false
 	end
-	local lines = {
-		"build_id=" .. Build.get_id(),
-		"category_key=" .. tostring(summary.category_key or ""),
-		"pack_version=" .. tostring(summary.pack_version or ""),
-		"seed=" .. tostring(summary.seed or ""),
-		"difficulty=" .. tostring(summary.difficulty_id or ""),
-		"duration=" .. tostring(summary.duration or 0),
-		"medal=" .. tostring(summary.medal or ""),
-		"best_possible_time=" .. tostring((sprint_result and sprint_result.best_possible_time) or summary.best_possible_time or ""),
-		"timer_start_reason=" .. tostring(summary.timer_start_reason or ""),
-		"replay_file=" .. tostring(replay_filename or ""),
+	local build_id = Build.get_id()
+	local export_base = Replay.get_export_dir() .. "/" .. Replay.export_basename(summary.category_key, os.time())
+	local payload = {
+		build_id = build_id,
+		category_key = summary.category_key or "",
+		pack_version = summary.pack_version or "",
+		seed = summary.seed or 0,
+		seed_pack_id = summary.sprint_seed_pack_id or "",
+		seed_id = summary.sprint_seed_id or "",
+		ruleset = summary.sprint_ruleset or "",
+		difficulty = summary.difficulty_id or "",
+		duration = summary.duration or 0,
+		medal = summary.medal or "",
+		best_possible_time = (sprint_result and sprint_result.best_possible_time) or summary.best_possible_time or 0,
+		timer_start_reason = summary.timer_start_reason or "",
+		replay_file = replay_filename or "",
+		gold_splits = util.deepcopy((sprint_result and sprint_result.gold_splits) or summary.gold_splits or {}),
+		projected_saves = util.deepcopy((sprint_result and sprint_result.projected_saves) or summary.projected_saves or {}),
+		splits = util.deepcopy(summary.splits or {}),
 	}
-	for _, split in ipairs(summary.splits or {}) do
+	local lines = {
+		"build_id=" .. tostring(payload.build_id),
+		"category_key=" .. tostring(payload.category_key),
+		"pack_version=" .. tostring(payload.pack_version),
+		"seed=" .. tostring(payload.seed),
+		"seed_pack_id=" .. tostring(payload.seed_pack_id),
+		"seed_id=" .. tostring(payload.seed_id),
+		"ruleset=" .. tostring(payload.ruleset),
+		"difficulty=" .. tostring(payload.difficulty),
+		"duration=" .. tostring(payload.duration),
+		"medal=" .. tostring(payload.medal),
+		"best_possible_time=" .. tostring(payload.best_possible_time),
+		"timer_start_reason=" .. tostring(payload.timer_start_reason),
+		"replay_file=" .. tostring(payload.replay_file),
+	}
+	for _, split in ipairs(payload.splits) do
 		lines[#lines + 1] = string.format("split:%s=%.4f", split.id, split.time or 0)
 	end
-	local file = Replay.get_export_dir() .. "/" .. Replay.export_filename(summary.category_key, os.time())
-	return Replay.write_text(file, table.concat(lines, "\n") .. "\n")
+	for _, split_id in ipairs(payload.gold_splits) do
+		lines[#lines + 1] = "gold_split=" .. tostring(split_id)
+	end
+	for _, save in ipairs(payload.projected_saves) do
+		lines[#lines + 1] = string.format("projected_save:%s=%.4f", save.id or save.label or "segment", save.save or 0)
+	end
+	local wrote_text = Replay.write_text(export_base .. ".txt", table.concat(lines, "\n") .. "\n")
+	local wrote_json = Replay.write_json(export_base .. ".json", payload)
+	return wrote_text and wrote_json
 end
 
 function App:advance_sprint_seed(step)
@@ -892,23 +937,40 @@ function App:draw_result()
 		draw_centered(lg, string.format("Floors %d  Damage %d  Torches %d  Sanity %d", stats.floors_cleared, stats.damage_taken, stats.torches_collected, math.floor(self.last_summary.sanity_left or 0)), height * 0.31, width, { 0.82, 0.84, 0.88, 1.0 })
 		draw_centered(lg, string.format("Flares %d  Consumables %d  Dashes %d  Boosts %d", stats.flares_used, stats.consumables_used or 0, stats.burn_dashes or 0, stats.flare_boosts or 0), height * 0.37, width, { 0.82, 0.84, 0.88, 1.0 })
 		if self.last_summary.mode == "sprint" then
+			local split_rows = {}
+			local projected_saves = self.last_summary.projected_saves or {}
 			if self.last_summary.sprint_ruleset == "official" then
 				local medal = self.last_summary.medal or "none"
 				local pb_text = self.last_sprint_record and self.last_sprint_record.new_pb and "NEW PB" or "PB unchanged"
 				local split_text = self.last_sprint_record and self.last_sprint_record.new_best_splits and "new split bests" or "split table stable"
-				draw_centered(lg, string.format("Medal %s  %s  %s", medal, pb_text, split_text), height * 0.44, width, { 0.94, 0.88, 0.42, 1.0 })
+				local record = self.last_sprint_record and self.last_sprint_record.record or (self.last_summary.category_key and self.settings.sprint_records[self.last_summary.category_key]) or nil
+				local best_possible = self.last_sprint_record and self.last_sprint_record.best_possible_time or self.last_summary.best_possible_time
+				projected_saves = self.last_sprint_record and self.last_sprint_record.projected_saves or projected_saves
+				split_rows = Sprint.get_split_rows(record and record.best_splits or {}, self.last_summary.splits or {})
+				draw_centered(lg, string.format("Medal %s  %s  %s  Best Possible %s", medal, pb_text, split_text, best_possible and format_time(best_possible) or "--"), height * 0.44, width, { 0.94, 0.88, 0.42, 1.0 })
 			else
 				local best = self.last_summary.practice_target and self.settings.sprint_practice_records[self.last_summary.practice_target]
+				split_rows = Sprint.get_split_rows({}, self.last_summary.splits or {})
 				draw_centered(lg, string.format("Sprint practice: %s  Best %s", self.last_summary.practice_target_label or self.last_summary.practice_target or "target", best and format_time(best.best_time) or "none"), height * 0.44, width, { 0.7, 0.8, 1.0, 1.0 })
 			end
 			local y = height * 0.50
-			for index, split in ipairs(self.last_summary.splits or {}) do
-				local delta = split.delta and string.format(" (%+0.2fs)", split.delta) or ""
+			for _, split in ipairs(split_rows) do
+				local delta = split.delta and ("  " .. format_delta(split.delta)) or ""
+				local segment = split.best_segment_time and string.format("  Seg %s / %s", format_time(split.segment_time or 0), format_time(split.best_segment_time or 0))
+					or string.format("  Seg %s", format_time(split.segment_time or 0))
 				local color = split.gold and { 0.98, 0.88, 0.42, 1.0 } or { 0.78, 0.8, 0.86, 1.0 }
-				draw_centered(lg, string.format("%s  %s%s", split.label, format_time(split.time), delta), y, width, color)
+				draw_centered(lg, string.format("%s  %s%s%s", split.label, format_time(split.time or 0), delta, segment), y, width, color)
 				y = y + 20
-				if index >= 8 then
-					break
+			end
+			if self.last_summary.sprint_ruleset == "official" then
+				local save_y = y + 10
+				draw_centered(lg, "Projected Saves", save_y, width, { 0.72, 0.9, 1.0, 1.0 })
+				if #projected_saves == 0 then
+					draw_centered(lg, "No segment time left on the table.", save_y + 20, width, { 0.64, 0.68, 0.76, 1.0 })
+				else
+					for index, save in ipairs(projected_saves) do
+						draw_centered(lg, string.format("%s  Save %s", save.label or save.id or "Segment", format_delta(save.save or 0)), save_y + index * 20, width, { 0.72, 0.9, 1.0, 1.0 })
+					end
 				end
 			end
 		else
