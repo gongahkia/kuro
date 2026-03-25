@@ -289,7 +289,7 @@ local function get_pack_or_default(pack_id)
 	return packs[pack_id] or packs.black_flame_circuit
 end
 
-local function sanitize_split(split)
+local function sanitize_split(split, pack_version)
 	return {
 		id = split.id,
 		label = split.label,
@@ -297,6 +297,7 @@ local function sanitize_split(split)
 		time = split.time,
 		delta = split.delta,
 		gold = split.gold == true,
+		pack_version = split.pack_version or pack_version or "",
 	}
 end
 
@@ -325,6 +326,41 @@ local function ordered_splits(splits)
 		end
 	end
 	return ordered
+end
+
+local function infer_best_time_pack_version(record)
+	return record.best_time_pack_version or record.pack_version or ""
+end
+
+local function infer_split_pack_version(split, record)
+	if split.pack_version and split.pack_version ~= "" then
+		return split.pack_version
+	end
+	return infer_best_time_pack_version(record)
+end
+
+local function normalize_record(record)
+	if not record then
+		return nil
+	end
+	record = util.deepcopy(record)
+	record.best_time_pack_version = infer_best_time_pack_version(record)
+	record.best_time_build_id = record.best_time_build_id or ""
+	record.pack_version = record.best_time_pack_version ~= "" and record.best_time_pack_version or (record.pack_version or "")
+	local versions = {}
+	for index, split in ipairs(record.best_splits or {}) do
+		record.best_splits[index] = sanitize_split(split, infer_split_pack_version(split, record))
+		local version = record.best_splits[index].pack_version
+		if version ~= "" then
+			versions[version] = true
+		end
+	end
+	local version_count = 0
+	for _ in pairs(versions) do
+		version_count = version_count + 1
+	end
+	record.mixed_split_versions = record.mixed_split_versions == true or version_count > 1
+	return record
 end
 
 local function segment_rows(best_splits, current_splits)
@@ -694,6 +730,21 @@ function Sprint.get_split_rows(best_splits, current_splits)
 	return segment_rows(best_splits, current_splits)
 end
 
+function Sprint.normalize_record(record)
+	return normalize_record(record)
+end
+
+function Sprint.link_pb_replay(records, category_key, replay_file)
+	records = records or {}
+	if not category_key or not records[category_key] then
+		return records, nil
+	end
+	local record = normalize_record(records[category_key])
+	record.pb_replay = replay_file
+	records[category_key] = record
+	return records, util.deepcopy(record)
+end
+
 function Sprint.update_record(records, summary, replay_file)
 	records = records or {}
 	if not summary or summary.mode ~= "sprint" or summary.sprint_ruleset ~= "official" or summary.outcome ~= "victory" or not summary.official_record_eligible then
@@ -706,7 +757,7 @@ function Sprint.update_record(records, summary, replay_file)
 	end
 
 	local key = summary.category_key or Sprint.category_key(summary.difficulty_id, summary.sprint_seed_pack_id, summary.sprint_seed_id)
-	local record = util.deepcopy(records[key] or {})
+	local record = normalize_record(records[key] or {})
 	local previous_medal = record.best_medal or record.medal
 	local best_split_map = split_index(record.best_splits or {})
 	local new_best_splits = false
@@ -715,7 +766,7 @@ function Sprint.update_record(records, summary, replay_file)
 	for _, split in ipairs(summary.splits or {}) do
 		local current = best_split_map[split.id]
 		if not current or split.time < current.time then
-			best_split_map[split.id] = sanitize_split(split)
+			best_split_map[split.id] = sanitize_split(split, summary.pack_version or infer_best_time_pack_version(record))
 			new_best_splits = true
 			gold_splits[#gold_splits + 1] = split.id
 		end
@@ -735,18 +786,35 @@ function Sprint.update_record(records, summary, replay_file)
 		best_medal = medal
 	end
 
-	record.best_time = new_pb and summary.duration or record.best_time
+	if new_pb then
+		record.best_time = summary.duration
+		record.best_time_pack_version = summary.pack_version or record.best_time_pack_version or ""
+		record.best_time_build_id = summary.build_id or record.best_time_build_id or ""
+	end
 	record.best_splits = best_splits
 	record.best_possible_time = Sprint.compute_best_possible_time(best_splits)
 	record.best_medal = best_medal
 	record.medal = best_medal
-	record.pack_version = summary.pack_version or record.pack_version
+	record.pack_version = infer_best_time_pack_version(record)
 	record.projected_saves = Sprint.compute_projected_saves(best_splits, summary.splits or {}, 3)
+	local versions = {}
+	for _, split in ipairs(record.best_splits or {}) do
+		local version = split.pack_version or ""
+		if version ~= "" then
+			versions[version] = true
+		end
+	end
+	local version_count = 0
+	for _ in pairs(versions) do
+		version_count = version_count + 1
+	end
+	record.mixed_split_versions = version_count > 1
 	if replay_file then
 		record.pb_replay = replay_file
 	elseif new_pb then
 		record.pb_replay = nil
 	end
+	record = normalize_record(record)
 	records[key] = record
 
 	return records, {
@@ -761,6 +829,9 @@ function Sprint.update_record(records, summary, replay_file)
 		category_key = key,
 		gold_splits = gold_splits,
 		projected_saves = util.deepcopy(record.projected_saves or {}),
+		best_time_pack_version = record.best_time_pack_version,
+		best_time_build_id = record.best_time_build_id,
+		mixed_split_versions = record.mixed_split_versions == true,
 	}
 end
 
