@@ -1077,6 +1077,32 @@ function Run:attempt_axis(candidate_x, candidate_y)
 	return true
 end
 
+function Run:query_nearest_wall(px, py, fx, fy)
+	local cell_x, cell_y = World.world_to_cell(px, py)
+	local best_dist = math.huge
+	local best_wall = nil
+	for y = cell_y - 1, cell_y + 1 do
+		for x = cell_x - 1, cell_x + 1 do
+			local sector = World.get_sector_by_cell(self.world, x, y)
+			if sector then
+				for _, wall in ipairs(sector.walls) do
+					local blocking = wall.neighbor == nil or (wall.door_id and not World.is_door_open(self.world, wall.door_id))
+					if blocking then
+						local dist = Geometry.distance_to_segment(px, py, wall.a.x, wall.a.y, wall.b.x, wall.b.y)
+						if dist < 0.23 and dist < best_dist then
+							best_dist = dist
+							best_wall = wall
+						end
+					end
+				end
+			end
+		end
+	end
+	if not best_wall then return nil end
+	local nx, ny = Geometry.wall_normal(best_wall)
+	return { normal_x = nx, normal_y = ny, distance = best_dist }
+end
+
 function Run:update_player(dt)
 	local move = 0
 	local strafe = 0
@@ -1116,7 +1142,10 @@ function Run:update_player(dt)
 		move_speed = move_speed,
 		strafe_speed = strafe_speed,
 	}
-	local vx, vy = self.momentum:update(dt, momentum_input, self.player, nil)
+	local wall_query = function(px, py, fx, fy)
+		return self:query_nearest_wall(px, py, fx, fy)
+	end
+	local vx, vy = self.momentum:update(dt, momentum_input, self.player, wall_query)
 
 	self:attempt_axis(self.player.x + vx * dt, self.player.y)
 	self:attempt_axis(self.player.x, self.player.y + vy * dt)

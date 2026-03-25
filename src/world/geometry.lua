@@ -57,6 +57,18 @@ function Geometry.facing_cardinal(angle)
 	return Geometry.direction_by_name.north
 end
 
+function Geometry.wall_normal(wall)
+	if wall.dir then
+		local dir = Geometry.direction_by_name[wall.dir]
+		if dir then return dir.dx, dir.dy end
+	end
+	local vx = wall.b.x - wall.a.x
+	local vy = wall.b.y - wall.a.y
+	local len = math.sqrt(vx * vx + vy * vy)
+	if len == 0 then return 0, 0 end
+	return -vy / len, vx / len
+end
+
 function Geometry.sample_line(ax, ay, bx, by, callback)
 	local steps = math.max(1, math.ceil(math.max(math.abs(bx - ax), math.abs(by - ay)) * 12))
 	for index = 0, steps do
